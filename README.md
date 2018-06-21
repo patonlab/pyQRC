@@ -7,7 +7,7 @@ The program will read a Gaussian frequency calculation and will create a new inp
 
 #### Installation
 1. Clone the repository https://github.com/bobbypaton/pyQRC.git
-2. Run the script with your Gaussian output files (the program expects log or out extensions). 
+2. Run the script with your Gaussian output files (the program expects log or out extensions) and can accept wildcard arguments.
 
 **Correct Usage**
 
