@@ -7,7 +7,6 @@ from __future__ import print_function, absolute_import
 #  From a Gaussian frequency calculation it is possible to create     #
 #  new input files which are displaced along any normal modes which   #
 #  have an imaginary frequency.                                       #
-#  run python QRC.py -h for all input options                         #
 #######################################################################
 __version__ = '1.0.1' # last modified May 5 2018
 __author__ = 'Rob Paton'
