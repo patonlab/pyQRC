@@ -1,5 +1,4 @@
 # pyQRC
-===
 
 [![DOI](https://zenodo.org/badge/138228684.svg)](https://zenodo.org/badge/latestdoi/138228684)
 
