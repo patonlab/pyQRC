@@ -132,11 +132,11 @@ class gen_qrc:
             log.Writeonlyfile(' version: '+__version__+' / author: '+__author__+' / email: '+__email__)
             log.Writeonlyfile(' Based on: Goodman, J. M.; Silva, M. A. Tet. Lett. 2003, 44, 8233-8236; Tet. Lett. 2005, 46, 2067-2069.\n')
             log.Writeonlyfile('                -----ORIGINAL GEOMETRY------')
-            log.Writeonlyfile('{:>4} {:>9} {:>9} {:>9} {:>9}'.format('', '', 'X', 'Y', 'Z'))
+            log.Writeonlyfile('{0:>4} {1:>9} {2:>9} {3:>9} {4:>9}'.format('', '', 'X', 'Y', 'Z'))
             for atom in range(0,freq.NATOMS):
-                log.Writeonlyfile('{:>4} {:>9} {:9.6f} {:9.6f} {:9.6f}'.format(freq.ATOMTYPES[atom], '', freq.CARTESIANS[atom][0], freq.CARTESIANS[atom][1], freq.CARTESIANS[atom][2]))
+                log.Writeonlyfile('{0:>4} {1:>9} {2:9.6f} {3:9.6f} {4:9.6f}'.format(freq.ATOMTYPES[atom], '', freq.CARTESIANS[atom][0], freq.CARTESIANS[atom][1], freq.CARTESIANS[atom][2]))
             log.Writeonlyfile('\n                ----HARMONIC FREQUENCIES----')
-            log.Writeonlyfile('{:>24} {:>9} {:>9}'.format('Freq', 'Red mass', 'F const'))
+            log.Writeonlyfile('{0:>24} {1:>9} {2:>9}'.format('Freq', 'Red mass', 'F const'))
             for mode in range(0,3*freq.NATOMS-6):
                 log.Writeonlyfile('{:24.4f} {:9.4f} {:9.4f}'.format(freq.FREQS[mode], freq.REDMASS[mode], freq.FORCECONST[mode]))
 
@@ -155,9 +155,9 @@ class gen_qrc:
                     log.Writeonlyfile('\n                -SHIFTING ALONG NORMAL MODE-')
                     log.Writeonlyfile('                -AMPLIFIER = '+str(shift[mode]))
 
-                    log.Writeonlyfile('{:>4} {:>9} {:>9} {:>9} {:>9}'.format('', '', 'X', 'Y', 'Z'))
+                    log.Writeonlyfile('{0:>4} {1:>9} {2:>9} {3:>9} {4:>9}'.format('', '', 'X', 'Y', 'Z'))
                     for atom in range(0,freq.NATOMS):
-                        log.Writeonlyfile('{:>4} {:>9} {:9.6f} {:9.6f} {:9.6f}'.format(freq.ATOMTYPES[atom], '', freq.NORMALMODE[mode][atom][0], freq.NORMALMODE[mode][atom][1], freq.NORMALMODE[mode][atom][2]))
+                        log.Writeonlyfile('{0:>4} {1:>9} {2:9.6f} {3:9.6f} {4:9.6f}'.format(freq.ATOMTYPES[atom], '', freq.NORMALMODE[mode][atom][0], freq.NORMALMODE[mode][atom][1], freq.NORMALMODE[mode][atom][2]))
             else: shift.append(0.0)
 
             # The starting geometry is displaced along the each normal mode according to the random shift
@@ -171,7 +171,7 @@ class gen_qrc:
         new_input.Writeonlyfile('%chk='+file.split(".")[0]+"_"+suffix+".chk")
         new_input.Writeonlyfile('%nproc='+str(nproc)+'\n%mem='+mem+'\n#'+route+'\n\n'+file.split(".")[0]+'_'+suffix+'\n\n'+str(freq.CHARGE)+" "+str(freq.MULT))
         for atom in range(0,freq.NATOMS):
-            new_input.Writeonlyfile('{:>2} {:12.8f} {:12.8f} {:12.8f}'.format(freq.ATOMTYPES[atom], freq.CARTESIANS[atom][0], freq.CARTESIANS[atom][1], freq.CARTESIANS[atom][2]))
+            new_input.Writeonlyfile('{0:>2} {1:12.8f} {2:12.8f} {3:12.8f}'.format(freq.ATOMTYPES[atom], freq.CARTESIANS[atom][0], freq.CARTESIANS[atom][1], freq.CARTESIANS[atom][2]))
         new_input.Writeonlyfile("\n")
 
 def main():
