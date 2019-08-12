@@ -5,7 +5,7 @@ import os
 import pytest
 import math
 from pyqrc import pyQRC as QRC
-from conftest import datapath
+from .conftest import datapath
 
 @pytest.mark.parametrize("path, nproc, mem", [
     ('acetaldehyde.log', 4,  '8GB'),
