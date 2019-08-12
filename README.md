@@ -1,4 +1,4 @@
-# pyQRC
+![pyQRC](pyQRC_banner.png)
 
 [![DOI](https://zenodo.org/badge/138228684.svg)](https://zenodo.org/badge/latestdoi/138228684)
 [![Build Status](https://travis-ci.org/bobbypaton/pyQRC.svg?branch=master)](https://travis-ci.org/bobbypaton/pyQRC)
