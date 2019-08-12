@@ -138,7 +138,7 @@ class gen_qrc:
             log.Writeonlyfile('\n                ----HARMONIC FREQUENCIES----')
             log.Writeonlyfile('{0:>24} {1:>9} {2:>9}'.format('Freq', 'Red mass', 'F const'))
             for mode in range(0,3*freq.NATOMS-6):
-                log.Writeonlyfile('{:24.4f} {:9.4f} {:9.4f}'.format(freq.FREQS[mode], freq.REDMASS[mode], freq.FORCECONST[mode]))
+                log.Writeonlyfile('{0:24.4f} {1:9.4f} {2:9.4f}'.format(freq.FREQS[mode], freq.REDMASS[mode], freq.FORCECONST[mode]))
 
         shift = []
 
