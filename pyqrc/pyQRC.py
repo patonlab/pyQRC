@@ -8,7 +8,7 @@ from __future__ import print_function, absolute_import
 #  new input files which are displaced along any normal modes which   #
 #  have an imaginary frequency.                                       #
 #######################################################################
-__version__ = '1.0.1' # last modified May 5 2018
+__version__ = '1.0' # last modified May 5 2018
 __author__ = 'Rob Paton'
 __email__= 'robert.paton@colostate.edu'
 #######################################################################
@@ -174,7 +174,7 @@ class gen_qrc:
             new_input.Writeonlyfile('{:>2} {:12.8f} {:12.8f} {:12.8f}'.format(freq.ATOMTYPES[atom], freq.CARTESIANS[atom][0], freq.CARTESIANS[atom][1], freq.CARTESIANS[atom][2]))
         new_input.Writeonlyfile("\n")
 
-if __name__ == "__main__":
+def main():
     # get command line inputs. Use -h to list all possible arguments and default values
     parser = OptionParser(usage="Usage: %prog [options] <input1>.log <input2>.log ...")
     parser.add_option("--amp", dest="amplitude", action="store", help="amplitude (default 0.2)", default="0.2", type="float", metavar="AMPLITUDE")
@@ -195,3 +195,6 @@ if __name__ == "__main__":
 
     for file in files:
         qrc = gen_qrc(file, options.amplitude, options.nproc, options.mem, options.route, options.verbose, options.suffix)
+
+if __name__ == "__main__":
+    main()
