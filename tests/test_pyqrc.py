@@ -11,6 +11,7 @@ from conftest import datapath
     ('acetaldehyde.log', 4,  '8GB'),
 ])
 def test_QRC(path, nproc, mem):
+    path = datapath(path)
     amplitude = 0.2
     route = None
     verbose = True
