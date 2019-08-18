@@ -182,6 +182,7 @@ def main():
     parser.add_option("--mem", dest="mem", action="store", help="memory (default 4GB)", default="4GB", type="string", metavar="MEM")
     parser.add_option("--route", dest="route", action="store", help="calculation route (defaults to same as original file)", default=None, type="string", metavar="ROUTE")
     parser.add_option("-v", dest="verbose", action="store_true", help="verbose output", default=True, metavar="VERBOSE")
+    parser.add_option("--auto", dest="auto", action="store_true", help="turn on automatic batch processing", default=False, metavar="AUTO")
     parser.add_option("--name", dest="suffix", action="store", help="append to file name (defaults to QRC)", default="QRC", type="string", metavar="SUFFIX")
     (options, args) = parser.parse_args()
 
@@ -194,7 +195,12 @@ def main():
          except IndexError: pass
 
     for file in files:
-        qrc = gen_qrc(file, options.amplitude, options.nproc, options.mem, options.route, options.verbose, options.suffix)
+        freq = getoutData(file)
+        if freq.IM_FREQS == 0 and options.auto != False:
+           print('x   {} has no imaginary frequencies: skipping'.format(file))
+        else:
+           print('o   {} has {} imaginary frequencies: processing'.format(file, freq.IM_FREQS))
+           qrc = gen_qrc(file, options.amplitude, options.nproc, options.mem, options.route, options.verbose, options.suffix)
 
 if __name__ == "__main__":
     main()
