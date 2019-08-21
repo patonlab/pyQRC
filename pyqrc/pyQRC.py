@@ -90,8 +90,7 @@ class getoutData:
                         self.CARTESIANS.append([float(outlines[i].split()[3]), float(outlines[i].split()[4]), float(outlines[i].split()[5])])
 
         def getFREQS(self, outlines, natoms, format):
-
-            self.FREQS = []; self.REDMASS = []; self.FORCECONST = []; self.NORMALMODE = []
+            self.FREQS = []; self.REDMASS = []; self.FORCECONST = []; self.NORMALMODE = []; self.IM_FREQS = 0
             freqs_so_far = 0
             if format == "Gaussian":
 
@@ -102,6 +101,7 @@ class getoutData:
                         for j in range(2, nfreqs):
                             self.FREQS.append(float(outlines[i].split()[j]))
                             self.NORMALMODE.append([])
+                            if float(outlines[i].split()[j]) < 0.0: self.IM_FREQS += 1
                         for j in range(3, nfreqs+1): self.REDMASS.append(float(outlines[i+1].split()[j]))
                         for j in range(3, nfreqs+1): self.FORCECONST.append(float(outlines[i+2].split()[j]))
 
@@ -120,7 +120,7 @@ class getoutData:
         getMASSES(self, outlines, "Gaussian")
 
 class gen_qrc:
-   def __init__(self, file, amplitude, nproc, mem, route, verbose, suffix):
+   def __init__(self, file, amplitude, nproc, mem, route, verbose, suffix, wn, num):
 
         freq = getoutData(file)
         # Write an output file
@@ -148,8 +148,18 @@ class gen_qrc:
             orig_carts.append([freq.CARTESIANS[atom][0], freq.CARTESIANS[atom][1], freq.CARTESIANS[atom][2]])
 
         # could get rid of atomic units here, if zpe_rat definition is changed
-        for mode in range(0,3*freq.NATOMS-6):
-            if freq.FREQS[mode] < 0.0:
+        for mode, wn in enumerate(freq.FREQS):
+            # Either moves along any and all imaginary freqs, or a specific mode requested by the user
+            if freq.FREQS[mode] < 0.0 and wn == None and num == None:
+                shift.append(amplitude)
+                if verbose:
+                    log.Writeonlyfile('\n                -SHIFTING ALONG NORMAL MODE-')
+                    log.Writeonlyfile('                -AMPLIFIER = '+str(shift[mode]))
+
+                    log.Writeonlyfile('{0:>4} {1:>9} {2:>9} {3:>9} {4:>9}'.format('', '', 'X', 'Y', 'Z'))
+                    for atom in range(0,freq.NATOMS):
+                        log.Writeonlyfile('{0:>4} {1:>9} {2:9.6f} {3:9.6f} {4:9.6f}'.format(freq.ATOMTYPES[atom], '', freq.NORMALMODE[mode][atom][0], freq.NORMALMODE[mode][atom][1], freq.NORMALMODE[mode][atom][2]))
+            elif freq.FREQS[mode] == wn or mode+1 == num:
                 shift.append(amplitude)
                 if verbose:
                     log.Writeonlyfile('\n                -SHIFTING ALONG NORMAL MODE-')
@@ -184,6 +194,8 @@ def main():
     parser.add_option("-v", dest="verbose", action="store_true", help="verbose output", default=True, metavar="VERBOSE")
     parser.add_option("--auto", dest="auto", action="store_true", help="turn on automatic batch processing", default=False, metavar="AUTO")
     parser.add_option("--name", dest="suffix", action="store", help="append to file name (defaults to QRC)", default="QRC", type="string", metavar="SUFFIX")
+    parser.add_option("-f", "--freq", dest="freq", action="store", help="request motion along a particular frequency (cm-1)", default=None, type="float", metavar="FREQ")
+    parser.add_option("--freqnum", dest="freqnum", action="store", help="request motion along a particular frequency (number)", default=None, type="int", metavar="FREQNUM")
     (options, args) = parser.parse_args()
 
     files = []
@@ -199,8 +211,13 @@ def main():
         if freq.IM_FREQS == 0 and options.auto != False:
            print('x   {} has no imaginary frequencies: skipping'.format(file))
         else:
-           print('o   {} has {} imaginary frequencies: processing'.format(file, freq.IM_FREQS))
-           qrc = gen_qrc(file, options.amplitude, options.nproc, options.mem, options.route, options.verbose, options.suffix)
+            if options.freq == None and options.freqnum == None:
+                print('o   {} has {} imaginary frequencies: processing'.format(file, freq.IM_FREQS))
+            elif options.freq != None:
+                print('o   {} will be distorted along the frequency of {} cm-1: processing'.format(file, options.freq))
+            elif options.freqnum != None:
+                print('o   {} will be distorted along the frequency number {}: processing'.format(file, options.freqnum))
+            qrc = gen_qrc(file, options.amplitude, options.nproc, options.mem, options.route, options.verbose, options.suffix, options.freq, options.freqnum)
 
 if __name__ == "__main__":
     main()
