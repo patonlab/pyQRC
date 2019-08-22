@@ -120,7 +120,7 @@ class getoutData:
         getMASSES(self, outlines, "Gaussian")
 
 class gen_qrc:
-   def __init__(self, file, amplitude, nproc, mem, route, verbose, suffix, wn, num):
+   def __init__(self, file, amplitude, nproc, mem, route, verbose, suffix, val, num):
 
         freq = getoutData(file)
         # Write an output file
@@ -150,7 +150,7 @@ class gen_qrc:
         # could get rid of atomic units here, if zpe_rat definition is changed
         for mode, wn in enumerate(freq.FREQS):
             # Either moves along any and all imaginary freqs, or a specific mode requested by the user
-            if freq.FREQS[mode] < 0.0 and wn == None and num == None:
+            if freq.FREQS[mode] < 0.0 and val == None and num == None:
                 shift.append(amplitude)
                 if verbose:
                     log.Writeonlyfile('\n                -SHIFTING ALONG NORMAL MODE-')
@@ -159,7 +159,8 @@ class gen_qrc:
                     log.Writeonlyfile('{0:>4} {1:>9} {2:>9} {3:>9} {4:>9}'.format('', '', 'X', 'Y', 'Z'))
                     for atom in range(0,freq.NATOMS):
                         log.Writeonlyfile('{0:>4} {1:>9} {2:9.6f} {3:9.6f} {4:9.6f}'.format(freq.ATOMTYPES[atom], '', freq.NORMALMODE[mode][atom][0], freq.NORMALMODE[mode][atom][1], freq.NORMALMODE[mode][atom][2]))
-            elif freq.FREQS[mode] == wn or mode+1 == num:
+            elif freq.FREQS[mode] == val or mode+1 == num:
+                print(wn, num)
                 shift.append(amplitude)
                 if verbose:
                     log.Writeonlyfile('\n                -SHIFTING ALONG NORMAL MODE-')
@@ -169,7 +170,7 @@ class gen_qrc:
                     for atom in range(0,freq.NATOMS):
                         log.Writeonlyfile('{0:>4} {1:>9} {2:9.6f} {3:9.6f} {4:9.6f}'.format(freq.ATOMTYPES[atom], '', freq.NORMALMODE[mode][atom][0], freq.NORMALMODE[mode][atom][1], freq.NORMALMODE[mode][atom][2]))
             else: shift.append(0.0)
-
+            
             # The starting geometry is displaced along the each normal mode according to the random shift
             for atom in range(0,freq.NATOMS):
                 for coord in range(0,3):
