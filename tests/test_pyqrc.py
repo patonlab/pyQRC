@@ -16,4 +16,5 @@ def test_QRC(path, nproc, mem):
     route = None
     verbose = True
     suffix = 'QRC'
-    qrc = QRC.gen_qrc(path, amplitude, nproc, mem, route, verbose, suffix)
+    freq, freq_num = None, None
+    qrc = QRC.gen_qrc(path, amplitude, nproc, mem, route, verbose, suffix, freq, freq_num)
