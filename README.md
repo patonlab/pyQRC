@@ -7,7 +7,7 @@ QRC is an abbreviation of **Quick Reaction Coordinate**. This provides a quick a
 
 The program will read a Gaussian frequency calculation and will create a new input file which has been projcted from the final coordinates along the Hessian eigenvector with a negative force constant. The magnitude of displacement can be adjusted on the command line. By default the projection will be in a positive sense (in relation to the imaginary normal mode) and the level of theory in the new input file will match that of the frequency calculation. In addition to the new input file(s) a summary is output to a text file ending in '.qrc'
 
-In addition to a "pound-shop" IRC calculation, a common application for pyQRC is in distorting ground state structures to remove annoying imaginary frequencies after reoptimization. This code has, in some form or other, been in use since around 2010.
+In addition to a pound-shop (dollar store) IRC calculation, a common application for pyQRC is in distorting ground state structures to remove annoying imaginary frequencies after reoptimization. This code has, in some form or other, been in use since around 2010.
 
 #### Installation
 1. Clone the repository https://github.com/bobbypaton/pyQRC.git and add to your PYTHONPATH variable
