@@ -16,7 +16,7 @@ In addition to a pound-shop (dollar store) IRC calculation, a common application
 **Correct Usage**
 
 ```python
-python -m pyqrc [--amp AMPLITUDE] [--nproc N] [--mem NGB] [--name APPEND] [--route 'B3LYP/6-31G*'] [-v] [--auto] <gaussian_output_file(s)>
+python -m pyqrc [--amp AMPLITUDE] [--nproc N] [--mem NGB] [--name APPEND] [--route 'B3LYP/6-31G*'] [-v] [--auto] [--freqnum INT] <gaussian_output_file(s)>
 ```
 
 *	The `--amp` multiplies the imaginary normal mode vector by this amount. It defaults to 0.2. Increase for larger displacements, and change the sign for displacement in the reverse direction.
@@ -26,14 +26,16 @@ python -m pyqrc [--amp AMPLITUDE] [--nproc N] [--mem NGB] [--name APPEND] [--rou
 *	The `--name` option is appended to the existing filename to create the new input file(s). This defaults to 'QRC'.
 *	The `-v` option requests verbose output to be printed.
 *	The `--auto` option will only process files with an imaginary frequency. Given any number of files it will ignore those that have no imaginary frequencies.
-
+* The `-f` or `--freq` option allows you to request motion along a particular frequency (in cm-1).
+* The `--freqnum` option allows you to request motion along a particular frequency (by number from the lowest).
+ 
 ## Example 1
 
 ```python
 python -m pyqrc acetaldehyde.log --nproc 4 --mem 8GB
 ```
 
-This initial optimization inadvertently produced a transition structure. The code displaces along the normal mode and creates a new input file. A subsequent optimization then fixes the problem since the imaginary frequency disappears.
+This initial optimization inadvertently produced a transition structure. The code displaces along the normal mode and creates a new input file. A subsequent optimization then fixes the problem since the imaginary frequency disappears. Note that by default this displacement occurs along all imaginary modes - if there is more than one imaginary frequency, and displacement is only desired along one of these (e.g. the lowest) then the use of `--freqnum 1` is necessary.
 
 
 ## Example 2
@@ -44,6 +46,16 @@ python -m pyqrc claisen_ts.log --nproc 4 --mem 8GB --amp -0.3 --name QRCR
 ```
 
 The initial optimization located a transition structure. The quick reaction coordinate (QRC) is obtained from two optmizations, started from twp points displaced along the reaction coordinate in either direction.
+
+
+## Example 3
+
+```python
+python -m pyqrc planar_chex.log --nproc 4 --freqnum 1 --name mode1
+python -m pyqrc planar_chex.log --nproc 4 --freqnum 3 --name mode3
+```
+
+In this example, the initial optimization located a (3rd order) saddle point - planar cyclohexane - with three imaginary frequencies. Two new inputs are created by displacing along (i) only the first (i.e., lowest) normal mode and (ii) only the third normal mode. This contrasts from the `auto` function of pyQRC which displaces along all imaginary modes. Subsequent optimizations of these new inputs results in different minima, producing (i) chair-shaped cyclohexane and (ii) twist-boat cyclohexane. This example illustrates that displacement along particular normal modes could be used for e.g. conformational sampling.
 
 
 #### References for the underlying theory
