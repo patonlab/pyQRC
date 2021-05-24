@@ -1,4 +1,3 @@
 include README.md
 include LICENSE.txt
-recursive-include goodvibes/examples *
-recursive-include goodvibes/share *
+recursive-include pyQRC/examples *
