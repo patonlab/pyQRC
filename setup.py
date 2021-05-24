@@ -8,8 +8,8 @@ with io.open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-  name='pyQRC',
-  packages=['pyQRC'],
+  name='pyqrc',
+  packages=['pyqrc'],
   version='1.0.2',
   description='A python program to project computed structures along computed normal modes and perform a Quick Reaction Coordinate calculation',
   long_description=long_description,
