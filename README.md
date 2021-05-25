@@ -11,8 +11,12 @@ The program will read a Gaussian frequency calculation and will create a new inp
 In addition to a pound-shop (dollar store) IRC calculation, a common application for pyQRC is in distorting ground state structures to remove annoying imaginary frequencies after reoptimization. This code has, in some form or other, been in use since around 2010.
 
 #### Installation
-1. Clone the repository https://github.com/bobbypaton/pyQRC.git and add to your PYTHONPATH variable
-2. Run the script as a python module with your Gaussian output files (the program expects log or out extensions) and can accept wildcard arguments.
+Easy:
+1. Pipy installation: `pip install pyqrc`
+
+Alternatively:
+3. Clone the repository https://github.com/bobbypaton/pyQRC.git and add to your PYTHONPATH variable
+4. Run the script as a python module with your Gaussian output files (the program expects log or out extensions) and can accept wildcard arguments.
 
 **Correct Usage**
 
