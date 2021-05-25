@@ -2,6 +2,7 @@
 
 [![DOI](https://zenodo.org/badge/138228684.svg)](https://zenodo.org/badge/latestdoi/138228684)
 [![Build Status](https://travis-ci.org/bobbypaton/pyQRC.svg?branch=master)](https://travis-ci.org/bobbypaton/pyQRC)
+[![PyPI version](https://badge.fury.io/py/pyqrc.svg)](https://badge.fury.io/py/pyqrc)
 
 QRC is an abbreviation of **Quick Reaction Coordinate**. This provides a quick alternative to IRC (intrisic reaction coordinate) calculations. This was first described by Silva and Goodman.<sup>1</sup> The [original code](http://www-jmg.ch.cam.ac.uk/software/QRC/) was developed in java for Jaguar output files. This python version works for Gaussian ouput files.
 
