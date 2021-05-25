@@ -12,11 +12,13 @@ In addition to a pound-shop (dollar store) IRC calculation, a common application
 
 #### Installation
 Easy:
-1. Pipy installation: `pip install pyqrc`
+Pipy installation: `pip install pyqrc`
 
 Alternatively:
-3. Clone the repository https://github.com/bobbypaton/pyQRC.git and add to your PYTHONPATH variable
-4. Run the script as a python module with your Gaussian output files (the program expects log or out extensions) and can accept wildcard arguments.
+
+Clone the repository https://github.com/bobbypaton/pyQRC.git and add to your PYTHONPATH variable
+
+Then run the script as a python module with your Gaussian output files (the program expects log or out extensions) and can accept wildcard arguments.
 
 **Correct Usage**
 
