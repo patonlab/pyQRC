@@ -17,11 +17,21 @@ __email__= 'robert.paton@colostate.edu'
 import sys, os
 from glob import glob
 from optparse import OptionParser
+import cclib
+import numpy as np
+import shutil
+import subprocess
 
 #Some useful arrays
 periodictable = ["","H","He","Li","Be","B","C","N","O","F","Ne","Na","Mg","Al","Si","P","S","Cl","Ar","K","Ca","Sc","Ti","V","Cr","Mn","Fe","Co","Ni","Cu","Zn","Ga","Ge","As","Se","Br","Kr","Rb","Sr","Y","Zr",
     "Nb","Mo","Tc","Ru","Rh","Pd","Ag","Cd","In","Sn","Sb","Te","I","Xe","Cs","Ba","La","Ce","Pr","Nd","Pm","Sm","Eu","Gd","Tb","Dy","Ho","Er","Tm","Yb","Lu","Hf","Ta","W","Re","Os","Ir","Pt","Au","Hg","Tl",
     "Pb","Bi","Po","At","Rn","Fr","Ra","Ac","Th","Pa","U","Np","Pu","Am","Cm","Bk","Cf","Es","Fm","Md","No","Lr","Rf","Db","Sg","Bh","Hs","Mt","Ds","Rg","Uub","Uut","Uuq","Uup","Uuh","Uus","Uuo"]
+
+rcov = {"H": 0.32,"He": 0.46,
+	"Li":1.33,"Be":1.02,"B":0.85,"C":0.75,"N":0.71,"O":0.63,"F":0.64,"Ne":0.67,
+	"Na":1.55,"Mg":1.39,"Al":1.26, "Si":1.16,"P":1.11,"S":1.03,"Cl":0.99, "Ar":0.96,
+	"K":1.96,"Ca":1.71,"Sc": 1.48, "Ti": 1.36, "V": 1.34, "Cr": 1.22, "Mn":1.19, "Fe":1.16, "Co":1.11, "Ni":1.10,"Zn":1.18, "Ga":1.24, "Ge":1.21, "As":1.21, "Se":1.16, "Br":1.14, "Kr":1.17,
+	"Rb":2.10, "Sr":1.85,"Y":1.63, "Zr":1.54, "Nb":1.47, "Mo":1.38, "Tc":1.28, "Ru":1.25,"Rh":1.25,"Pd":1.20,"Ag":1.28,"Cd":1.36, "In":1.42, "Sn":1.40,"Sb":1.40,"Te":1.36,"I":1.33,"Xe":1.31}
 
 def elementID(massno):
         if massno < len(periodictable): return periodictable[massno]
@@ -32,17 +42,64 @@ class Logger:
    # Designated initializer
    def __init__(self,filein,suffix,append):
       # Create the log file at the input path
-      self.log = open(filein+"_"+append+"."+suffix, 'w' )
-
+      self.log = open(filein+"_"+append+"."+suffix,'w')
    # Write a message only to the log and not to the terminal
    def Writeonlyfile(self, message):
-      self.log.write("\n"+message)
+       self.log.write("\n"+message)
 
 #Read data from an output file
 class getoutData:
     def __init__(self, file):
         if not os.path.exists(file):
             print(("\nFATAL ERROR: Output file [ %s ] does not exist"%file))
+
+        def level_of_theory(file):
+            """Read output for the level of theory and basis set used."""
+            repeated_theory = 0
+            with open(file) as f:
+                data = f.readlines()
+            level, bs = 'none', 'none'
+
+            for line in data:
+                if line.strip().find('External calculation') > -1:
+                    level, bs = 'ext', 'ext'
+                    break
+                if '\\Freq\\' in line.strip() and repeated_theory == 0:
+                    try:
+                        level, bs = (line.strip().split("\\")[4:6])
+                        repeated_theory = 1
+                    except IndexError:
+                        pass
+                elif '|Freq|' in line.strip() and repeated_theory == 0:
+                    try:
+                        level, bs = (line.strip().split("|")[4:6])
+                        repeated_theory = 1
+                    except IndexError:
+                        pass
+                if '\\SP\\' in line.strip() and repeated_theory == 0:
+                    try:
+                        level, bs = (line.strip().split("\\")[4:6])
+                        repeated_theory = 1
+                    except IndexError:
+                        pass
+                elif '|SP|' in line.strip() and repeated_theory == 0:
+                    try:
+                        level, bs = (line.strip().split("|")[4:6])
+                        repeated_theory = 1
+                    except IndexError:
+                        pass
+                if 'DLPNO BASED TRIPLES CORRECTION' in line.strip():
+                    level = 'DLPNO-CCSD(T)'
+                if 'Estimated CBS total energy' in line.strip():
+                    try:
+                        bs = ("Extrapol." + line.strip().split()[4])
+                    except IndexError:
+                        pass
+                # Remove the restricted R or unrestricted U label
+                if level[0] in ('R', 'U'):
+                    level = level[1:]
+            level_of_theory = '/'.join([level, bs])
+            return level_of_theory
 
         def getJOBTYPE(self, outlines, format):
             if format == "Gaussian":
@@ -51,6 +108,7 @@ class getoutData:
                     if outlines[i].strip().find('----------') > -1:
                         if outlines[i+1].strip().find('#') > -1:
                             self.JOBTYPE = outlines[i+1].strip().split('#')[1]
+                            self.LEVELOFTHEORY = level_of_theory(file)
                             break;
 
         def getTERMINATION(self, outlines,format):
@@ -160,7 +218,7 @@ class gen_qrc:
                     for atom in range(0,freq.NATOMS):
                         log.Writeonlyfile('{0:>4} {1:>9} {2:9.6f} {3:9.6f} {4:9.6f}'.format(freq.ATOMTYPES[atom], '', freq.NORMALMODE[mode][atom][0], freq.NORMALMODE[mode][atom][1], freq.NORMALMODE[mode][atom][2]))
             elif freq.FREQS[mode] == val or mode+1 == num:
-                print(wn, num)
+                # print(wn, num)
                 shift.append(amplitude)
                 if verbose:
                     log.Writeonlyfile('\n                -SHIFTING ALONG NORMAL MODE-')
@@ -170,7 +228,7 @@ class gen_qrc:
                     for atom in range(0,freq.NATOMS):
                         log.Writeonlyfile('{0:>4} {1:>9} {2:9.6f} {3:9.6f} {4:9.6f}'.format(freq.ATOMTYPES[atom], '', freq.NORMALMODE[mode][atom][0], freq.NORMALMODE[mode][atom][1], freq.NORMALMODE[mode][atom][2]))
             else: shift.append(0.0)
-            
+
             # The starting geometry is displaced along the each normal mode according to the random shift
             for atom in range(0,freq.NATOMS):
                 for coord in range(0,3):
@@ -181,9 +239,52 @@ class gen_qrc:
             route = freq.JOBTYPE
         new_input.Writeonlyfile('%chk='+file.split(".")[0]+"_"+suffix+".chk")
         new_input.Writeonlyfile('%nproc='+str(nproc)+'\n%mem='+mem+'\n#'+route+'\n\n'+file.split(".")[0]+'_'+suffix+'\n\n'+str(freq.CHARGE)+" "+str(freq.MULT))
+        # Save the new Cartesian coordinates
+        self.NEW_CARTESIAN = []
         for atom in range(0,freq.NATOMS):
             new_input.Writeonlyfile('{0:>2} {1:12.8f} {2:12.8f} {3:12.8f}'.format(freq.ATOMTYPES[atom], freq.CARTESIANS[atom][0], freq.CARTESIANS[atom][1], freq.CARTESIANS[atom][2]))
+            self.NEW_CARTESIAN.append([freq.CARTESIANS[atom][0], freq.CARTESIANS[atom][1], freq.CARTESIANS[atom][2]])
         new_input.Writeonlyfile("\n")
+        self.ATOMTYPES = freq.ATOMTYPES
+
+        def gen_overlap(mol_atoms, coords, covfrac):
+            ## Use VDW radii to infer a connectivity matrix
+            over_mat = np.zeros((len(mol_atoms), len(mol_atoms)))
+            for i, atom_no_i in enumerate(mol_atoms):
+                for j, atom_no_j in enumerate(mol_atoms):
+                    if j > i:
+                        rcov_ij = rcov[atom_no_i] + rcov[atom_no_j]
+                        dist_ij = np.linalg.norm(np.array(coords[i])-np.array(coords[j]))
+                        if dist_ij / rcov_ij < covfrac:
+                            #print((i+1), (j+1), dist_ij, vdw_ij, rcov_ij)
+                            over_mat[i][j] = 1
+                        else: pass
+            return over_mat
+
+        def check_overlap(self, covfrac=0.8):
+            overlapped = None
+            over_mat = gen_overlap(self.ATOMTYPES, self.NEW_CARTESIAN, covfrac)
+            overlapped = np.any(over_mat)
+            return overlapped
+
+        self.OVERLAPPED = check_overlap(self)
+
+def g16_opt( comfile):
+    ''' run g16 using shell script and args '''
+    # check whether job has already been run
+    logfile = os.path.splitext(comfile)[0] + '.log'
+    command = [os.path.abspath(os.path.dirname(__file__))+'/run_g16.sh', str(comfile)]
+    g16_result = subprocess.run(command)
+
+
+def run_irc(file,options,num,amp,lot_bs,suffix,charge,mult,log_output):
+    #checking amplitutes energy for a given node and creating the single point file
+    qrc = gen_qrc(file, amp, options.nproc, options.mem, lot_bs, options.verbose, suffix, None, num)
+    #do check of GEOMETRY if its valid and no atoms overlappins
+    if not qrc.OVERLAPPED:
+        g16_opt(file.split('.')[0]+'_'+suffix+'.com')
+    else:
+        log_output.Writeonlyfile('x  Skipping {} due to overlap in atoms'.format(file.split('.')[0]+'_'+suffix+'.com'))
 
 def main():
     # get command line inputs. Use -h to list all possible arguments and default values
@@ -197,6 +298,11 @@ def main():
     parser.add_option("--name", dest="suffix", action="store", help="append to file name (defaults to QRC)", default="QRC", type="string", metavar="SUFFIX")
     parser.add_option("-f", "--freq", dest="freq", action="store", help="request motion along a particular frequency (cm-1)", default=None, type="float", metavar="FREQ")
     parser.add_option("--freqnum", dest="freqnum", action="store", help="request motion along a particular frequency (number)", default=None, type="int", metavar="FREQNUM")
+
+    #arguments for running calcs
+    parser.add_option("--runirc", dest="runirc", action="store_true", help="request automatic single point calculation along a particular normal modes (number)", default=False, metavar="RUNIRC")
+    parser.add_option("--nummodes", dest="nummodes", action="store", help="number of modes for automatic single point calculation", default='all', type='string',metavar="NUMMODES")
+
     (options, args) = parser.parse_args()
 
     files = []
@@ -207,18 +313,55 @@ def main():
                for file in glob(elem): files.append(file)
          except IndexError: pass
 
+
     for file in files:
         freq = getoutData(file)
-        if freq.IM_FREQS == 0 and options.auto != False:
-           print('x   {} has no imaginary frequencies: skipping'.format(file))
+        if not options.runirc:
+            if freq.IM_FREQS == 0 and options.auto != False:
+               print('x   {} has no imaginary frequencies: skipping'.format(file))
+            else:
+                if options.freq == None and options.freqnum == None:
+                    print('o   {} has {} imaginary frequencies: processing'.format(file, freq.IM_FREQS))
+                elif options.freq != None:
+                    print('o   {} will be distorted along the frequency of {} cm-1: processing'.format(file, options.freq))
+                elif options.freqnum != None:
+                    print('o   {} will be distorted along the frequency number {}: processing'.format(file, options.freqnum))
+                qrc = gen_qrc(file, options.amplitude, options.nproc, options.mem, options.route, options.verbose, options.suffix, options.freq, options.freqnum)
+
+        #doing automatic calcualtions (single points for stability check)
         else:
-            if options.freq == None and options.freqnum == None:
-                print('o   {} has {} imaginary frequencies: processing'.format(file, freq.IM_FREQS))
-            elif options.freq != None:
-                print('o   {} will be distorted along the frequency of {} cm-1: processing'.format(file, options.freq))
-            elif options.freqnum != None:
-                print('o   {} will be distorted along the frequency number {}: processing'.format(file, options.freqnum))
-            qrc = gen_qrc(file, options.amplitude, options.nproc, options.mem, options.route, options.verbose, options.suffix, options.freq, options.freqnum)
+            log_output = Logger("RUNIRC",'dat',options.nummodes)
+            if freq.IM_FREQS == 0:
+               log_output.Writeonlyfile('o   {} has no imaginary frequencies: check for stability'.format(file))
+            amp_base =  [round(elem, 2) for elem in np.arange(0,1,0.1) ]
+            # amp_base_backward =  [round(elem, 2) for elem in np.arange(-1,0,0.1) ]
+            energy_base = []
+            root_dir = os.getcwd()
+            parent_dir = os.getcwd()+'/'+file.split('.')[0]
+            if not os.path.exists(parent_dir):
+                os.makedirs(parent_dir)
+            log_output.Writeonlyfile('o  Entering directory {}'.format(parent_dir))
+            # getting energetics of the current molecule
+            data = cclib.io.ccread(file)
+            energy_base.append(data.freeenergy)
+            #creating folders for number of normal modes
+            if options.nummodes=='all':
+                freq_range = range(1,len(freq.FREQS)+1)
+            else:
+                freq_range = range(1,len(freq.FREQS)+1)
+                freq_range = freq_range[:int(options.nummodes)]
+            for num in freq_range:
+                num_dir = parent_dir +'/'+ 'num_'+str(num)
+                if not os.path.exists(num_dir):
+                    os.makedirs(num_dir)
+                log_output.Writeonlyfile('o  Entering directory {}'.format(num_dir))
+                shutil.copyfile(root_dir+'/'+file, num_dir+'/'+file)
+                os.chdir(num_dir)
+                for amp in amp_base:
+                    suffix = 'num_'+str(num)+'_amp_'+str(amp).split('.')[0]+str(amp).split('.')[1]
+                    run_irc(file,options,num,amp,freq.LEVELOFTHEORY,suffix,freq.CHARGE,freq.MULT,log_output)
+                    log_output.Writeonlyfile('o  Writing to file {}'.format(file.split('.')[0]+'_'+suffix))
+                os.chdir(parent_dir)
 
 if __name__ == "__main__":
     main()
