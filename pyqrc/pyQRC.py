@@ -8,8 +8,8 @@ from __future__ import print_function, absolute_import
 #  new input files which are displaced along any normal modes which   #
 #  have an imaginary frequency.                                       #
 #######################################################################
-__version__ = '1.0' # last modified May 5 2018
-__author__ = 'Rob Paton'
+__version__ = '2.0' # last modified May 5 2018
+__author__ = 'Robert Paton'
 __email__= 'robert.paton@colostate.edu'
 #######################################################################
 
@@ -47,7 +47,7 @@ class Logger:
    def Writeonlyfile(self, message):
        self.log.write("\n"+message)
 
-#Read data from an output file
+#Read data from an output file - data not currently provided by cclib
 class getoutData:
     def __init__(self, file):
         if not os.path.exists(file):
@@ -117,157 +117,123 @@ class getoutData:
                                     if outlines[i].find("Normal termination") > -1:
                                             self.TERMINATION = "normal"
 
-        def getCHARGE(self, outlines, format):
-            if format == "Gaussian":
-                for i in range(0,len(outlines)):
-                    if outlines[i].find("Charge = ") > -1:
-                        self.CHARGE = int(outlines[i].split()[2])
-                        self.MULT = int(outlines[i].split()[5].rstrip("\n")); break
-
-        def getMASSES(self, outlines, format):
-            self.MASSES = []
-            if format == "Gaussian":
-                for i in range(0,len(outlines)):
-                    if outlines[i].find("has atomic number") > -1:
-                        self.MASSES.append(float(outlines[i].split()[8]))
-
-        def getATOMTYPES(self, outlines, format):
-            self.ATOMTYPES = []; self.CARTESIANS = []
-            if format == "Gaussian":
-                for i in range(0,len(outlines)):
-                    if outlines[i].find("Input orientation") > -1: standor = i
-                    if outlines[i].find("Standard orientation") > -1: standor = i
-                    if outlines[i].find("Distance matrix") > -1 or outlines[i].find("Rotational constants") >-1:
-                        if outlines[i-1].find("-------") > -1:
-                            self.NATOMS = i-standor-6
-                try: standor
-                except NameError: pass
-                else:
-                    for i in range (standor+5,standor+5+self.NATOMS):
-                        self.ATOMTYPES.append(elementID(int(outlines[i].split()[1])))
-                        self.CARTESIANS.append([float(outlines[i].split()[3]), float(outlines[i].split()[4]), float(outlines[i].split()[5])])
-
-        def getFREQS(self, outlines, natoms, format):
-            self.FREQS = []; self.REDMASS = []; self.FORCECONST = []; self.NORMALMODE = []; self.IM_FREQS = 0
-            freqs_so_far = 0
-            if format == "Gaussian":
-
-                for i in range(0,len(outlines)):
-                    if outlines[i].find(" Frequencies -- ") > -1:
-
-                        nfreqs = len(outlines[i].split())
-                        for j in range(2, nfreqs):
-                            self.FREQS.append(float(outlines[i].split()[j]))
-                            self.NORMALMODE.append([])
-                            if float(outlines[i].split()[j]) < 0.0: self.IM_FREQS += 1
-                        for j in range(3, nfreqs+1): self.REDMASS.append(float(outlines[i+1].split()[j]))
-                        for j in range(3, nfreqs+1): self.FORCECONST.append(float(outlines[i+2].split()[j]))
-
-                        for j in range(0,natoms):
-                            for k in range(0, nfreqs-2):
-                                self.NORMALMODE[(freqs_so_far + k)].append([float(outlines[i+5+j].split()[3*k+2]), float(outlines[i+5+j].split()[3*k+3]), float(outlines[i+5+j].split()[3*k+4])])
-                        freqs_so_far = freqs_so_far + nfreqs - 2
-
         outfile = open(file,"r")
         outlines = outfile.readlines()
         getJOBTYPE(self, outlines, "Gaussian")
         getTERMINATION(self, outlines,"Gaussian")
-        getCHARGE(self, outlines, "Gaussian")
-        getATOMTYPES(self, outlines, "Gaussian")
-        getFREQS(self, outlines, self.NATOMS, "Gaussian")
-        getMASSES(self, outlines, "Gaussian")
 
 class gen_qrc:
    def __init__(self, file, amplitude, nproc, mem, route, verbose, suffix, val, num):
 
-        freq = getoutData(file)
-        # Write an output file
-        if verbose: log = Logger(file.split(".")[0],"qrc", suffix)
+        # parse compchem output with cclib
+        parser = cclib.io.ccopen(file)
+        data = parser.parse()
 
-        # The molecular data as read in from the frequency calculation, including atomic masses
-        if verbose:
-            log.Writeonlyfile(' pyQRC - a quick alternative to IRC calculations')
-            log.Writeonlyfile(' version: '+__version__+' / author: '+__author__+' / email: '+__email__)
-            log.Writeonlyfile(' Based on: Goodman, J. M.; Silva, M. A. Tet. Lett. 2003, 44, 8233-8236; Tet. Lett. 2005, 46, 2067-2069.\n')
-            log.Writeonlyfile('                -----ORIGINAL GEOMETRY------')
-            log.Writeonlyfile('{0:>4} {1:>9} {2:>9} {3:>9} {4:>9}'.format('', '', 'X', 'Y', 'Z'))
-            for atom in range(0,freq.NATOMS):
-                log.Writeonlyfile('{0:>4} {1:>9} {2:9.6f} {3:9.6f} {4:9.6f}'.format(freq.ATOMTYPES[atom], '', freq.CARTESIANS[atom][0], freq.CARTESIANS[atom][1], freq.CARTESIANS[atom][2]))
-            log.Writeonlyfile('\n                ----HARMONIC FREQUENCIES----')
-            log.Writeonlyfile('{0:>24} {1:>9} {2:>9}'.format('Freq', 'Red mass', 'F const'))
-            for mode in range(0,3*freq.NATOMS-6):
-                log.Writeonlyfile('{0:24.4f} {1:9.4f} {2:9.4f}'.format(freq.FREQS[mode], freq.REDMASS[mode], freq.FORCECONST[mode]))
+        try:
+            nat, charge, mult = data.natom, data.charge, data.mult
+            elements = [periodictable[z] for z in data.atomnos]
+            cartesians = data.atomcoords[-1]
+            freq, rmass, fconst, disps = data.vibfreqs, data.vibrmasses, data.vibfconsts, data.vibdisps
 
-        shift = []
+            # Write an output file
+            if verbose: log = Logger(file.split(".")[0],"qrc", suffix)
 
-        # Save the original Cartesian coordinates before they are altered
-        orig_carts = []
-        for atom in range(0,freq.NATOMS):
-            orig_carts.append([freq.CARTESIANS[atom][0], freq.CARTESIANS[atom][1], freq.CARTESIANS[atom][2]])
+            # The molecular data as read in from the frequency calculation, including atomic masses
+            if verbose:
+                log.Writeonlyfile(' pyQRC - a quick alternative to IRC calculations')
+                log.Writeonlyfile(' version: '+__version__+' / author: '+__author__+' / email: '+__email__)
+                log.Writeonlyfile(' Based on: Goodman, J. M.; Silva, M. A. Tet. Lett. 2003, 44, 8233-8236; Tet. Lett. 2005, 46, 2067-2069.\n')
+                log.Writeonlyfile('                -----ORIGINAL GEOMETRY------')
+                log.Writeonlyfile('{0:>4} {1:>9} {2:>9} {3:>9} {4:>9}'.format('', '', 'X', 'Y', 'Z'))
+                for atom in range(0,nat):
+                    log.Writeonlyfile('{0:>4} {1:>9} {2:9.6f} {3:9.6f} {4:9.6f}'.format(elements[atom], '', cartesians[atom][0], cartesians[atom][1], cartesians[atom][2]))
+                log.Writeonlyfile('\n                ----HARMONIC FREQUENCIES----')
+                log.Writeonlyfile('{0:>24} {1:>9} {2:>9}'.format('Freq', 'Red mass', 'F const'))
+                for mode in range(0,3*nat-6):
+                    log.Writeonlyfile('{0:24.4f} {1:9.4f} {2:9.4f}'.format(freq[mode], rmass[mode], fconst[mode]))
 
-        # could get rid of atomic units here, if zpe_rat definition is changed
-        for mode, wn in enumerate(freq.FREQS):
-            # Either moves along any and all imaginary freqs, or a specific mode requested by the user
-            if freq.FREQS[mode] < 0.0 and val == None and num == None:
-                shift.append(amplitude)
-                if verbose:
-                    log.Writeonlyfile('\n                -SHIFTING ALONG NORMAL MODE-')
-                    log.Writeonlyfile('                -AMPLIFIER = '+str(shift[mode]))
+            shift = []
 
-                    log.Writeonlyfile('{0:>4} {1:>9} {2:>9} {3:>9} {4:>9}'.format('', '', 'X', 'Y', 'Z'))
-                    for atom in range(0,freq.NATOMS):
-                        log.Writeonlyfile('{0:>4} {1:>9} {2:9.6f} {3:9.6f} {4:9.6f}'.format(freq.ATOMTYPES[atom], '', freq.NORMALMODE[mode][atom][0], freq.NORMALMODE[mode][atom][1], freq.NORMALMODE[mode][atom][2]))
-            elif freq.FREQS[mode] == val or mode+1 == num:
-                # print(wn, num)
-                shift.append(amplitude)
-                if verbose:
-                    log.Writeonlyfile('\n                -SHIFTING ALONG NORMAL MODE-')
-                    log.Writeonlyfile('                -AMPLIFIER = '+str(shift[mode]))
+            # Save the original Cartesian coordinates before they are altered
+            orig_carts = []
+            for atom in range(0,nat):
+                orig_carts.append([cartesians[atom][0], cartesians[atom][1], cartesians[atom][2]])
 
-                    log.Writeonlyfile('{0:>4} {1:>9} {2:>9} {3:>9} {4:>9}'.format('', '', 'X', 'Y', 'Z'))
-                    for atom in range(0,freq.NATOMS):
-                        log.Writeonlyfile('{0:>4} {1:>9} {2:9.6f} {3:9.6f} {4:9.6f}'.format(freq.ATOMTYPES[atom], '', freq.NORMALMODE[mode][atom][0], freq.NORMALMODE[mode][atom][1], freq.NORMALMODE[mode][atom][2]))
-            else: shift.append(0.0)
+            # Based on user input select the appropriate displacements
+            for mode, wn in enumerate(freq):
 
-            # The starting geometry is displaced along the each normal mode according to the random shift
-            for atom in range(0,freq.NATOMS):
-                for coord in range(0,3):
-                    freq.CARTESIANS[atom][coord] = freq.CARTESIANS[atom][coord] + freq.NORMALMODE[mode][atom][coord] * shift[mode]
+                # Either moves along any and all imaginary freqs, or a specific mode requested by the user
+                if wn < 0.0 and val == None and num == None:
+                    shift.append(amplitude)
+                    if verbose:
+                        log.Writeonlyfile('\n                -SHIFTING ALONG NORMAL MODE-')
+                        log.Writeonlyfile('                -AMPLIFIER = '+str(shift[mode]))
 
-        new_input = Logger(file.split(".")[0],"com", suffix)
-        if route == None:
-            route = freq.JOBTYPE
-        new_input.Writeonlyfile('%chk='+file.split(".")[0]+"_"+suffix+".chk")
-        new_input.Writeonlyfile('%nproc='+str(nproc)+'\n%mem='+mem+'\n#'+route+'\n\n'+file.split(".")[0]+'_'+suffix+'\n\n'+str(freq.CHARGE)+" "+str(freq.MULT))
-        # Save the new Cartesian coordinates
-        self.NEW_CARTESIAN = []
-        for atom in range(0,freq.NATOMS):
-            new_input.Writeonlyfile('{0:>2} {1:12.8f} {2:12.8f} {3:12.8f}'.format(freq.ATOMTYPES[atom], freq.CARTESIANS[atom][0], freq.CARTESIANS[atom][1], freq.CARTESIANS[atom][2]))
-            self.NEW_CARTESIAN.append([freq.CARTESIANS[atom][0], freq.CARTESIANS[atom][1], freq.CARTESIANS[atom][2]])
-        new_input.Writeonlyfile("\n")
-        self.ATOMTYPES = freq.ATOMTYPES
+                        log.Writeonlyfile('{0:>4} {1:>9} {2:>9} {3:>9} {4:>9}'.format('', '', 'X', 'Y', 'Z'))
+                        for atom in range(0,nat):
+                            log.Writeonlyfile('{0:>4} {1:>9} {2:9.6f} {3:9.6f} {4:9.6f}'.format(elements[atom], '', disps[mode][atom][0], disps[mode][atom][1], disps[mode][atom][2]))
 
-        def gen_overlap(mol_atoms, coords, covfrac):
-            ## Use VDW radii to infer a connectivity matrix
-            over_mat = np.zeros((len(mol_atoms), len(mol_atoms)))
-            for i, atom_no_i in enumerate(mol_atoms):
-                for j, atom_no_j in enumerate(mol_atoms):
-                    if j > i:
-                        rcov_ij = rcov[atom_no_i] + rcov[atom_no_j]
-                        dist_ij = np.linalg.norm(np.array(coords[i])-np.array(coords[j]))
-                        if dist_ij / rcov_ij < covfrac:
-                            #print((i+1), (j+1), dist_ij, vdw_ij, rcov_ij)
-                            over_mat[i][j] = 1
-                        else: pass
-            return over_mat
+                elif wn == val or mode+1 == num:
+                    # print(wn, num)
+                    shift.append(amplitude)
+                    if verbose:
+                        log.Writeonlyfile('\n                -SHIFTING ALONG NORMAL MODE-')
+                        log.Writeonlyfile('                -AMPLIFIER = '+str(shift[mode]))
 
-        def check_overlap(self, covfrac=0.8):
-            overlapped = None
-            over_mat = gen_overlap(self.ATOMTYPES, self.NEW_CARTESIAN, covfrac)
-            overlapped = np.any(over_mat)
-            return overlapped
+                        log.Writeonlyfile('{0:>4} {1:>9} {2:>9} {3:>9} {4:>9}'.format('', '', 'X', 'Y', 'Z'))
+                        for atom in range(0,nat):
+                            log.Writeonlyfile('{0:>4} {1:>9} {2:9.6f} {3:9.6f} {4:9.6f}'.format(elements[atom], '', disps[mode][atom][0], disps[mode][atom][1], disps[mode][atom][2]))
+                else: shift.append(0.0)
 
-        self.OVERLAPPED = check_overlap(self)
+                # The starting geometry is displaced along the each normal mode multipled by a user-specified amplitude
+                for atom in range(0,nat):
+                    for coord in range(0,3):
+                        cartesians[atom][coord] = cartesians[atom][coord] + disps[mode][atom][coord] * shift[mode]
+
+            # Create a new input file
+            new_input = Logger(file.split(".")[0],"com", suffix)
+
+            # if not specified, the job specification will be cloned from the previous calculation
+            if route == None:
+                gdata = getoutData(file)
+                route = gdata.JOBTYPE
+
+            new_input.Writeonlyfile('%chk='+file.split(".")[0]+"_"+suffix+".chk")
+            new_input.Writeonlyfile('%nproc='+str(nproc)+'\n%mem='+mem+'\n#'+route+'\n\n'+file.split(".")[0]+'_'+suffix+'\n\n'+str(charge)+" "+str(mult))
+
+            # Save the new Cartesian coordinates
+            self.NEW_CARTESIAN = []
+            for atom in range(0,nat):
+                new_input.Writeonlyfile('{0:>2} {1:12.8f} {2:12.8f} {3:12.8f}'.format(elements[atom], cartesians[atom][0], cartesians[atom][1], cartesians[atom][2]))
+                self.NEW_CARTESIAN.append([cartesians[atom][0], cartesians[atom][1], cartesians[atom][2]])
+            new_input.Writeonlyfile("\n")
+            self.ATOMTYPES = elements
+
+            def gen_overlap(mol_atoms, coords, covfrac):
+                ## Use VDW radii to infer a connectivity matrix
+                over_mat = np.zeros((len(mol_atoms), len(mol_atoms)))
+                for i, atom_no_i in enumerate(mol_atoms):
+                    for j, atom_no_j in enumerate(mol_atoms):
+                        if j > i:
+                            rcov_ij = rcov[atom_no_i] + rcov[atom_no_j]
+                            dist_ij = np.linalg.norm(np.array(coords[i])-np.array(coords[j]))
+                            if dist_ij / rcov_ij < covfrac:
+                                #print((i+1), (j+1), dist_ij, vdw_ij, rcov_ij)
+                                over_mat[i][j] = 1
+                            else: pass
+                return over_mat
+
+            def check_overlap(self, covfrac=0.8):
+                overlapped = None
+                over_mat = gen_overlap(self.ATOMTYPES, self.NEW_CARTESIAN, covfrac)
+                overlapped = np.any(over_mat)
+                return overlapped
+
+            self.OVERLAPPED = check_overlap(self)
+
+        except:
+            print('o   Unable to parse information from {} with cclib ...'.format(file))
+
 
 def g16_opt( comfile):
     ''' run g16 using shell script and args '''
@@ -300,7 +266,7 @@ def main():
     parser.add_option("--freqnum", dest="freqnum", action="store", help="request motion along a particular frequency (number)", default=None, type="int", metavar="FREQNUM")
 
     #arguments for running calcs
-    parser.add_option("--runirc", dest="runirc", action="store_true", help="request automatic single point calculation along a particular normal modes (number)", default=False, metavar="RUNIRC")
+    parser.add_option("--qcoord", dest="qcoord", action="store_true", help="request automatic single point calculation along a particular normal mode (number)", default=False, metavar="QCOORD")
     parser.add_option("--nummodes", dest="nummodes", action="store", help="number of modes for automatic single point calculation", default='all', type='string',metavar="NUMMODES")
 
     (options, args) = parser.parse_args()
@@ -315,13 +281,17 @@ def main():
 
 
     for file in files:
-        freq = getoutData(file)
-        if not options.runirc:
-            if freq.IM_FREQS == 0 and options.auto != False:
+        # parse compchem output with cclib & count imaginary frequencies
+        parser = cclib.io.ccopen(file)
+        data = parser.parse()
+        im_freq = len([val for val in data.vibfreqs if val < 0])
+
+        if not options.qcoord:
+            if im_freq == 0 and options.auto != False:
                print('x   {} has no imaginary frequencies: skipping'.format(file))
             else:
                 if options.freq == None and options.freqnum == None:
-                    print('o   {} has {} imaginary frequencies: processing'.format(file, freq.IM_FREQS))
+                    print('o   {} has {} imaginary frequencies: processing'.format(file, im_freq))
                 elif options.freq != None:
                     print('o   {} will be distorted along the frequency of {} cm-1: processing'.format(file, options.freq))
                 elif options.freqnum != None:
@@ -331,7 +301,7 @@ def main():
         #doing automatic calcualtions (single points for stability check)
         else:
             log_output = Logger("RUNIRC",'dat',options.nummodes)
-            if freq.IM_FREQS == 0:
+            if im_freq == 0:
                log_output.Writeonlyfile('o   {} has no imaginary frequencies: check for stability'.format(file))
             amp_base =  [round(elem, 2) for elem in np.arange(0,1,0.1) ]
             # amp_base_backward =  [round(elem, 2) for elem in np.arange(-1,0,0.1) ]
@@ -341,14 +311,14 @@ def main():
             if not os.path.exists(parent_dir):
                 os.makedirs(parent_dir)
             log_output.Writeonlyfile('o  Entering directory {}'.format(parent_dir))
+
             # getting energetics of the current molecule
-            data = cclib.io.ccread(file)
             energy_base.append(data.freeenergy)
             #creating folders for number of normal modes
             if options.nummodes=='all':
-                freq_range = range(1,len(freq.FREQS)+1)
+                freq_range = range(1,len(data.vibfreqs)+1)
             else:
-                freq_range = range(1,len(freq.FREQS)+1)
+                freq_range = range(1,len(data.vibfreqs)+1)
                 freq_range = freq_range[:int(options.nummodes)]
             for num in freq_range:
                 num_dir = parent_dir +'/'+ 'num_'+str(num)
