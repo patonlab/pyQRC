@@ -1,6 +1,6 @@
 
  pyQRC - a quick alternative to IRC calculations
- version: 1.0.1 / author: Rob Paton / email: robert.paton@colostate.edu
+ version: 2.0 / author: Robert Paton / email: robert.paton@colostate.edu
  Based on: Goodman, J. M.; Silva, M. A. Tet. Lett. 2003, 44, 8233-8236; Tet. Lett. 2005, 46, 2067-2069.
 
                 -----ORIGINAL GEOMETRY------
@@ -32,7 +32,7 @@
                3125.7552    1.1037    6.3535
 
                 -SHIFTING ALONG NORMAL MODE-
-                -AMPLIFIER = 0.2
+                -AMPLIFIER = 0.3
                        X         Y         Z
    H            0.000000  0.000000 -0.410000
    C            0.000000 -0.000000 -0.090000
@@ -41,3 +41,5 @@
    H            0.000000  0.000000  0.510000
    H            0.190000 -0.420000 -0.250000
    H           -0.190000  0.420000 -0.250000
+
+   STRUCTURE MOVED BY 1.395 Bohr amu^1/2 

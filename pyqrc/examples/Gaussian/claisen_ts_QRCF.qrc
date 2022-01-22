@@ -1,6 +1,6 @@
 
  pyQRC - a quick alternative to IRC calculations
- version: 1.0.1 / author: Rob Paton / email: robert.paton@colostate.edu
+ version: 2.0 / author: Robert Paton / email: robert.paton@colostate.edu
  Based on: Goodman, J. M.; Silva, M. A. Tet. Lett. 2003, 44, 8233-8236; Tet. Lett. 2005, 46, 2067-2069.
 
                 -----ORIGINAL GEOMETRY------
@@ -76,3 +76,5 @@
    H           -0.030000 -0.010000 -0.010000
    H           -0.240000 -0.060000 -0.030000
    H            0.040000  0.040000  0.040000
+
+   STRUCTURE MOVED BY 1.701 Bohr amu^1/2 

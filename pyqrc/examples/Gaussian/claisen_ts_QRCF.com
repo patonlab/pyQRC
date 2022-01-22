@@ -1,8 +1,8 @@
 
 %chk=claisen_ts_QRCF.chk
-%nproc=4
-%mem=8GB
-#freq b3lyp/6-31g(d) opt
+%nproc=1
+%mem=4GB
+#  opt(ts,calcfc,noeigentest) freq b3lyp/6-31g(d)
 
 claisen_ts_QRCF
 
