@@ -1,7 +1,7 @@
 ![pyQRC](pyQRC_banner.png)
 
 [![DOI](https://zenodo.org/badge/138228684.svg)](https://zenodo.org/badge/latestdoi/138228684)
-[![Build Status](https://travis-ci.org/bobbypaton/pyQRC.svg?branch=master)](https://travis-ci.org/bobbypaton/pyQRC)
+[![Build Status](https://travis-ci.com/bobbypaton/pyQRC.svg?branch=master)](https://travis-ci.com/bobbypaton/pyQRC)
 [![PyPI version](https://badge.fury.io/py/pyqrc.svg)](https://badge.fury.io/py/pyqrc)
 
 QRC is an abbreviation of **Quick Reaction Coordinate**. This provides a quick alternative to IRC (intrisic reaction coordinate) calculations. This was first described by Silva and Goodman.<sup>1</sup> The [original code](http://www-jmg.ch.cam.ac.uk/software/QRC/) was developed in java for Jaguar output files. This python version works for Gaussian ouput files.
@@ -33,7 +33,7 @@ python -m pyqrc [--amp AMPLITUDE] [--nproc N] [--mem NGB] [--name APPEND] [--rou
 *	The `--auto` option will only process files with an imaginary frequency. Given any number of files it will ignore those that have no imaginary frequencies.
 * The `-f` or `--freq` option allows you to request motion along a particular frequency (in cm-1).
 * The `--freqnum` option allows you to request motion along a particular frequency (by number from the lowest).
- 
+
 ## Example 1
 
 ```python
