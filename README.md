@@ -14,7 +14,7 @@ In addition to a pound-shop (dollar store) IRC calculation, a common application
 Easy:
 Pipy installation: `pip install pyqrc`
 
-Alternatively: Clone the repository https://github.com/bobbypaton/pyQRC.git and add to your PYTHONPATH variable
+Alternatively: Clone the repository https://github.com/patonlab/pyQRC.git and add to your PYTHONPATH variable
 
 Then run the script as a python module with your Gaussian output files (the program expects log or out extensions) and can accept wildcard arguments.
 
