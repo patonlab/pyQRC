@@ -20,6 +20,7 @@ setup(
   download_url='https://github.com/bobbypaton/pyQRC/archive/v1.0.3.zip',
   keywords=['compchem', 'thermochemistry', 'gaussian', 'imaginary frequencies', 'intrinsic reaction coordinate', 'normal modes'],
   classifiers=[],
+  install_requires=["cclib"],
   python_requires='>=2.6',
   include_package_data=True,
 )
