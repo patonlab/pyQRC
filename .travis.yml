@@ -42,6 +42,7 @@ matrix:
 
 install:
   - pip install pytest
+  - pip install cclib
   - python setup.py install
   - ./.travis-install.sh
 
