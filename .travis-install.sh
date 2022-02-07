@@ -26,7 +26,8 @@ if [[$TRAVIS_OS_NAME == 'osx']]; then
             ;;
     esac
     export PATH="/Users/travis/.pyenv/shims:${PATH}"
-#     pyenv-virtualenv venv
-#     source venv/bin/activate
-#     python --version
+    pyenv-virtualenv venv
+    source venv/bin/activate
+    python --version
 fi
+
