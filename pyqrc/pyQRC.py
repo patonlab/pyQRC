@@ -190,7 +190,12 @@ class gen_qrc:
         data = parser.parse()
 
         #try:
-        nat, charge, mult, atomnos = data.natom, data.charge, data.mult, data.atomnos
+        nat, charge, atomnos = data.natom, data.charge, data.atomnos
+        try:
+            mult = data.mult 
+        except:
+            AttributeError 
+            mult = 1    # surface level workaround to set default value of multiplicity to 1 if not parsed properly by cclib
         elements = [periodictable[z] for z in atomnos]
         cartesians = data.atomcoords[-1]
         freq, disps = data.vibfreqs, data.vibdisps
