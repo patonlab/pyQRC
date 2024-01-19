@@ -195,7 +195,8 @@ class gen_qrc:
             mult = data.mult 
         except:
             AttributeError 
-            mult = 1    # surface level workaround to set default value of multiplicity to 1 if not parsed properly by cclib
+            mult = '1'    # surface level workaround to set default value of multiplicity to 1 if not parsed properly by cclib
+            print('Warning - multiplicity not parsed from input: defaulted to 1 in input files')
         elements = [periodictable[z] for z in atomnos]
         cartesians = data.atomcoords[-1]
         freq, disps = data.vibfreqs, data.vibdisps
