@@ -21,6 +21,6 @@ setup(
   keywords=['compchem', 'thermochemistry', 'gaussian', 'imaginary frequencies', 'intrinsic reaction coordinate', 'normal modes'],
   classifiers=[],
   install_requires=["cclib"],
-  python_requires='>=2.6',
+  python_requires='>=3.6',
   include_package_data=True,
 )
