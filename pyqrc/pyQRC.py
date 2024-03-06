@@ -14,7 +14,7 @@ __email__= 'robert.paton@colostate.edu'
 #######################################################################
 
 #Python Libraries
-import sys, os
+import sys, os, re
 from glob import glob
 from optparse import OptionParser
 import cclib
@@ -75,7 +75,7 @@ class Logger:
       self.log = open(filein+"_"+append+"."+suffix,'w')
    # Write a message only to the log and not to the terminal
    def Writeonlyfile(self, message):
-       self.log.write("\n"+message)
+       self.log.write(message+"\n")
 
 #Read data from an output file - data not currently provided by cclib
 class getoutData:
@@ -143,16 +143,22 @@ class getoutData:
                 for i in range(0,len(outlines)):
                     if outlines[i].strip().find('----------') > -1:
                         if outlines[i+1].strip().find('#') > -1:
-                            self.JOBTYPE = outlines[i+1].strip().split('#')[1]
+                            self.JOBTYPE = ''
+                            for j in range(i+1,len(outlines)):
+                                if outlines[j].strip().find('----------') > -1:
+                                    break
+                                else:
+                                    self.JOBTYPE = self.JOBTYPE+re.sub('#','',outlines[j].strip())
+                            self.JOBTYPE = re.sub(r' geom=\S+','',self.JOBTYPE)
                             self.LEVELOFTHEORY = level_of_theory(file)
-                            break;
+                            break
             if self.format == "ORCA":
                 level = "none"; bs = "none"
                 for i in range(0,len(outlines)):
                     if outlines[i].strip().find('> !') > -1:
                         self.JOBTYPE = outlines[i].strip().split('> !')[1].lstrip()
                         self.LEVELOFTHEORY = level_of_theory(file)
-                        break;
+                        break
 
         def getTERMINATION(self, outlines):
                     if self.format == "Gaussian":
@@ -297,7 +303,7 @@ class gen_qrc:
 
         if format == "Gaussian":
             new_input.Writeonlyfile('%chk='+file.split(".")[0]+"_"+suffix+".chk")
-            new_input.Writeonlyfile('%nproc='+str(nproc)+'\n%mem='+mem+'\n# '+route+'\n\n'+file.split(".")[0]+'_'+suffix+'\n\n'+str(charge)+" "+str(mult))
+            new_input.Writeonlyfile('%nproc='+str(nproc)+'\n%mem='+mem+'\n#'+route+'\n\n'+file.split(".")[0]+'_'+suffix+'\n\n'+str(charge)+" "+str(mult))
         elif format == "ORCA":
             new_input.Writeonlyfile('! '+route+'\n\n# '+file.split(".")[0]+'_'+suffix+'\n\n* xyz '+str(charge)+" "+str(mult))
         elif format == "QChem":
@@ -305,7 +311,7 @@ class gen_qrc:
         # Save the new Cartesian coordinates
         for atom in range(0,nat):
             new_input.Writeonlyfile('{0:>2} {1:12.8f} {2:12.8f} {3:12.8f}'.format(elements[atom], cartesians[atom][0], cartesians[atom][1], cartesians[atom][2]))
-        if format == "Gaussian": new_input.Writeonlyfile("\n")
+        if format == "Gaussian": new_input.Writeonlyfile("")
         elif format == "ORCA": new_input.Writeonlyfile("*")
         elif format == "QChem":
             new_input.Writeonlyfile("$end\n\n$rem")
