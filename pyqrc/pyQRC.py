@@ -313,7 +313,7 @@ class gen_qrc:
                 mem = int(memory_number[0])*1024
 
             else:
-                ## asuuming memory is given in MB
+                ## assuming memory is given in MB
                 mem = memory_number[0]
             
             new_input.Writeonlyfile('! '+route+'\n %pal nprocs '+str(nproc) + ' end\n %maxcore '+ str(mem)+ '\n\n# '+file.split(".")[0]+'_'+suffix+'\n\n* xyz '+str(charge)+" "+str(mult))
