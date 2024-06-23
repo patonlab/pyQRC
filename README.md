@@ -4,21 +4,22 @@
 [![Build Status](https://app.travis-ci.com/patonlab/pyQRC.svg?branch=master)](https://travis-ci.com/github/patonlab/pyQRC)
 [![PyPI version](https://badge.fury.io/py/pyqrc.svg)](https://badge.fury.io/py/pyqrc)
 
+### Introduction
 QRC is an abbreviation of **Quick Reaction Coordinate**. This provides a quick alternative to IRC (intrisic reaction coordinate) calculations. This was first described by Silva and Goodman.<sup>1</sup> The [original code](http://www-jmg.ch.cam.ac.uk/software/QRC/) was developed in java for Jaguar output files. This Python version uses [cclib](https://cclib.github.io/) to process a variety of compchem outputs.
 
 The program will read a Gaussian frequency calculation and will create a new input file which has been projcted from the final coordinates along the Hessian eigenvector with a negative force constant. The magnitude of displacement can be adjusted on the command line. By default the projection will be in a positive sense (in relation to the imaginary normal mode) and the level of theory in the new input file will match that of the frequency calculation. In addition to the new input file(s) a summary is output to a text file ending in '.qrc'
 
 In addition to a pound-shop (dollar store) IRC calculation, a common application for pyQRC is in distorting ground state structures to remove annoying imaginary frequencies after reoptimization. This code has, in some form or other, been in use since around 2010.
 
-#### Installation
+### Installation
 Easy:
-Pipy installation: `pip install pyqrc`
+Pypi installation: `pip install pyqrc`
 
 Alternatively: Clone the repository https://github.com/patonlab/pyQRC.git and add to your PYTHONPATH variable
 
 Then run the script as a python module with your Gaussian output files (the program expects log or out extensions) and can accept wildcard arguments.
 
-**Correct Usage**
+## Usage
 
 ```python
 python -m pyqrc [--amp AMPLITUDE] [--nproc N] [--mem NGB] [--name APPEND] [--route 'B3LYP/6-31G*'] [-v] [--auto] [--freqnum INT] <gaussian_output_file(s)>
@@ -65,6 +66,11 @@ In this example, the initial optimization located a (3rd order) saddle point - p
 
 #### References for the underlying theory
 1. (a) Goodman, J. M.; Silva, M. A. *Tetrahedron Lett.* **2003**, *44*, 8233-8236 [**DOI:** 10.1016/j.tetlet.2003.09.074](http://dx.doi.org/10.1016/j.tetlet.2003.09.074); (b) Goodman, J. M.; Silva, M. A. *Tetrahedron Lett.* **2005**, *46*, 2067-2069 [**DOI:** 10.1016/j.tetlet.2005.01.142](http://dx.doi.org/10.1016/j.tetlet.2005.01.142)
+
+
+## Contributors
+
+- Robert Paton ([@bobbypaton](https://github.com/bobbypaton))
 
 ---
 License: [MIT](https://opensource.org/licenses/MIT)
