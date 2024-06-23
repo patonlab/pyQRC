@@ -305,7 +305,18 @@ class gen_qrc:
             new_input.Writeonlyfile('%chk='+file.split(".")[0]+"_"+suffix+".chk")
             new_input.Writeonlyfile('%nproc='+str(nproc)+'\n%mem='+mem+'\n#'+route+'\n\n'+file.split(".")[0]+'_'+suffix+'\n\n'+str(charge)+" "+str(mult))
         elif format == "ORCA":
-            new_input.Writeonlyfile('! '+route+'\n\n# '+file.split(".")[0]+'_'+suffix+'\n\n* xyz '+str(charge)+" "+str(mult))
+
+            ## split maxcore string for ORCA
+            memory_number = re.findall(r'\d+',mem)
+            unit = re.findall(r'GB',mem)
+            if len(unit) > 0:
+                mem = int(memory_number[0])*1024
+
+            else:
+                ## assuming memory is given in MB
+                mem = memory_number[0]
+            
+            new_input.Writeonlyfile('! '+route+'\n %pal nprocs '+str(nproc) + ' end\n %maxcore '+ str(mem)+ '\n\n# '+file.split(".")[0]+'_'+suffix+'\n\n* xyz '+str(charge)+" "+str(mult))
         elif format == "QChem":
             new_input.Writeonlyfile('$molecule\n'+str(charge)+" "+str(mult))
         # Save the new Cartesian coordinates
