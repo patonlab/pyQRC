@@ -19,7 +19,7 @@ Alternatively: Clone the repository https://github.com/patonlab/pyQRC.git and ad
 
 Then run the script as a python module with your Gaussian output files (the program expects log or out extensions) and can accept wildcard arguments.
 
-## Usage
+### Usage
 
 ```python
 python -m pyqrc [--amp AMPLITUDE] [--nproc N] [--mem NGB] [--name APPEND] [--route 'B3LYP/6-31G*'] [-v] [--auto] [--freqnum INT] <gaussian_output_file(s)>
@@ -35,7 +35,17 @@ python -m pyqrc [--amp AMPLITUDE] [--nproc N] [--mem NGB] [--name APPEND] [--rou
 * The `-f` or `--freq` option allows you to request motion along a particular frequency (in cm-1).
 * The `--freqnum` option allows you to request motion along a particular frequency (by number from the lowest).
 
-## Example 1
+
+### Dependencies
+* [Python](https://www.python.org/) >= v. 3.6
+* [cclib]([https://www.python.org/](https://cclib.github.io/))
+* One of:
+   * [ORCA](https://sites.google.com/site/orcainputlibrary/home/) > v. 4.0
+   * [Gaussian09](https://gaussian.com/glossary/g09/)
+   * [Gaussian16](https://gaussian.com/gaussian16/)
+   * [QChem](https://www.q-chem.com/) > 5.4
+
+### Example 1
 
 ```python
 python -m pyqrc acetaldehyde.log --nproc 4 --mem 8GB
@@ -44,7 +54,7 @@ python -m pyqrc acetaldehyde.log --nproc 4 --mem 8GB
 This initial optimization inadvertently produced a transition structure. The code displaces along the normal mode and creates a new input file. A subsequent optimization then fixes the problem since the imaginary frequency disappears. Note that by default this displacement occurs along all imaginary modes - if there is more than one imaginary frequency, and displacement is only desired along one of these (e.g. the lowest) then the use of `--freqnum 1` is necessary.
 
 
-## Example 2
+### Example 2
 
 ```python
 python -m pyqrc claisen_ts.log --nproc 4 --mem 8GB --amp 0.3 --name QRCF
@@ -54,7 +64,7 @@ python -m pyqrc claisen_ts.log --nproc 4 --mem 8GB --amp -0.3 --name QRCR
 The initial optimization located a transition structure. The quick reaction coordinate (QRC) is obtained from two optmizations, started from twp points displaced along the reaction coordinate in either direction.
 
 
-## Example 3
+### Example 3
 
 ```python
 python -m pyqrc planar_chex.log --nproc 4 --freqnum 1 --name mode1
@@ -64,13 +74,16 @@ python -m pyqrc planar_chex.log --nproc 4 --freqnum 3 --name mode3
 In this example, the initial optimization located a (3rd order) saddle point - planar cyclohexane - with three imaginary frequencies. Two new inputs are created by displacing along (i) only the first (i.e., lowest) normal mode and (ii) only the third normal mode. This contrasts from the `auto` function of pyQRC which displaces along all imaginary modes. Subsequent optimizations of these new inputs results in different minima, producing (i) chair-shaped cyclohexane and (ii) twist-boat cyclohexane. This example illustrates that displacement along particular normal modes could be used for e.g. conformational sampling.
 
 
-#### References for the underlying theory
+### References for the underlying theory
 1. (a) Goodman, J. M.; Silva, M. A. *Tetrahedron Lett.* **2003**, *44*, 8233-8236 [**DOI:** 10.1016/j.tetlet.2003.09.074](http://dx.doi.org/10.1016/j.tetlet.2003.09.074); (b) Goodman, J. M.; Silva, M. A. *Tetrahedron Lett.* **2005**, *46*, 2067-2069 [**DOI:** 10.1016/j.tetlet.2005.01.142](http://dx.doi.org/10.1016/j.tetlet.2005.01.142)
 
 
-## Contributors
+### Contributors
 
 - Robert Paton ([@bobbypaton](https://github.com/bobbypaton))
+- Guilian Luchini ([@luchini18](https://github.com/luchini18))
+- Shree Sowndarya ([@shreesowndarya](https://github.com/shreesowndarya))
+- Alister Goodfellow ([@aligfellow](https://github.com/aligfellow))
 
 ---
 License: [MIT](https://opensource.org/licenses/MIT)
