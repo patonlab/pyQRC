@@ -5,6 +5,8 @@
 [![Python versions](https://img.shields.io/pypi/pyversions/pyqrc)](https://pypi.org/project/pyqrc/)
 [![Downloads](https://img.shields.io/pypi/dm/pyqrc)](https://pypi.org/project/pyqrc/)
 [![License](https://img.shields.io/pypi/l/pyqrc)](https://opensource.org/licenses/MIT)
+[![CircleCI](https://dl.circleci.com/status-badge/img/gh/patonlab/pyQRC/tree/master.svg?style=shield)](https://dl.circleci.com/status-badge/redirect/gh/patonlab/pyQRC/tree/master)
+[![codecov](https://codecov.io/gh/patonlab/pyQRC/branch/master/graph/badge.svg)](https://codecov.io/gh/patonlab/pyQRC)
 
 ## Introduction
 
