@@ -1,4 +1,4 @@
-![pyQRC](pyQRC_banner.png)
+![pyQRC](https://raw.githubusercontent.com/patonlab/pyQRC/master/pyQRC_banner.png)
 
 [![DOI](https://zenodo.org/badge/138228684.svg)](https://zenodo.org/badge/latestdoi/138228684)
 [![PyPI version](https://badge.fury.io/py/pyqrc.svg)](https://badge.fury.io/py/pyqrc)
@@ -34,6 +34,11 @@ python -m pyqrc my_ts.log --nproc 4 --mem 8GB
 **Via PyPI (recommended):**
 ```bash
 pip install pyqrc
+```
+
+**Via uv:**
+```bash
+uv pip install pyqrc
 ```
 
 **From source:**
