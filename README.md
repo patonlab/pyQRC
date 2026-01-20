@@ -1,84 +1,130 @@
 ![pyQRC](pyQRC_banner.png)
 
 [![DOI](https://zenodo.org/badge/138228684.svg)](https://zenodo.org/badge/latestdoi/138228684)
-[![Build Status](https://app.travis-ci.com/patonlab/pyQRC.svg?branch=master)](https://travis-ci.com/github/patonlab/pyQRC)
 [![PyPI version](https://badge.fury.io/py/pyqrc.svg)](https://badge.fury.io/py/pyqrc)
+[![Python versions](https://img.shields.io/pypi/pyversions/pyqrc)](https://pypi.org/project/pyqrc/)
+[![Downloads](https://img.shields.io/pypi/dm/pyqrc)](https://pypi.org/project/pyqrc/)
+[![License](https://img.shields.io/pypi/l/pyqrc)](https://opensource.org/licenses/MIT)
+[![CircleCI](https://dl.circleci.com/status-badge/img/gh/patonlab/pyQRC/tree/master.svg?style=shield)](https://dl.circleci.com/status-badge/redirect/gh/patonlab/pyQRC/tree/master)
+[![codecov](https://codecov.io/gh/patonlab/pyQRC/branch/master/graph/badge.svg)](https://codecov.io/gh/patonlab/pyQRC)
 
-### Introduction
-QRC is an abbreviation of **Quick Reaction Coordinate**. This provides a quick alternative to IRC (intrisic reaction coordinate) calculations. This was first described by Silva and Goodman.<sup>1</sup> The [original code](http://www-jmg.ch.cam.ac.uk/software/QRC/) was developed in java for Jaguar output files. This Python version uses [cclib](https://cclib.github.io/) to process a variety of compchem outputs.
+## Introduction
 
-The program will read a Gaussian frequency calculation and will create a new input file which has been projcted from the final coordinates along the Hessian eigenvector with a negative force constant. The magnitude of displacement can be adjusted on the command line. By default the projection will be in a positive sense (in relation to the imaginary normal mode) and the level of theory in the new input file will match that of the frequency calculation. In addition to the new input file(s) a summary is output to a text file ending in '.qrc'
+QRC is an abbreviation of **Quick Reaction Coordinate**. This provides a quick alternative to IRC (intrinsic reaction coordinate) calculations. This was first described by Silva and Goodman.<sup>1</sup> The [original code](http://www-jmg.ch.cam.ac.uk/software/QRC/) was developed in Java for Jaguar output files. This Python version uses [cclib](https://cclib.github.io/) to process a variety of computational chemistry outputs.
+
+The program will read a Gaussian frequency calculation and will create a new input file which has been projected from the final coordinates along the Hessian eigenvector with a negative force constant. The magnitude of displacement can be adjusted on the command line. By default the projection will be in a positive sense (in relation to the imaginary normal mode) and the level of theory in the new input file will match that of the frequency calculation.
 
 In addition to a pound-shop (dollar store) IRC calculation, a common application for pyQRC is in distorting ground state structures to remove annoying imaginary frequencies after reoptimization. This code has, in some form or other, been in use since around 2010.
 
-### Installation
-Easy:
-Pypi installation: `pip install pyqrc`
+## Quick Start
 
-Alternatively: Clone the repository https://github.com/patonlab/pyQRC.git and add to your PYTHONPATH variable
+```bash
+# Install
+pip install pyqrc
 
-Then run the script as a python module with your Gaussian output files (the program expects log or out extensions) and can accept wildcard arguments.
+# Basic usage - displace along imaginary frequency
+python -m pyqrc my_ts.log
 
-### Usage
-
-```python
-python -m pyqrc [--amp AMPLITUDE] [--nproc N] [--mem NGB] [--name APPEND] [--route 'B3LYP/6-31G*'] [-v] [--auto] [--freqnum INT] <gaussian_output_file(s)>
+# Specify processors and memory for the new input file
+python -m pyqrc my_ts.log --nproc 4 --mem 8GB
 ```
 
-*	The `--amp` multiplies the imaginary normal mode vector by this amount. It defaults to 0.2. Increase for larger displacements, and change the sign for displacement in the reverse direction.
-*	The `--nproc ` option selects the number of processors requested in the new input file. It defatuls to 1.
-*	The `--mem` option specifies the memory requested in the new input file. It defatuls to 4GB. The correct format of input is XGB or X000MB where X can take any integer value.
-*	The `--route` option specifies the route line for the new calculation to be performed.
-*	The `--name` option is appended to the existing filename to create the new input file(s). This defaults to 'QRC'.
-*	The `-v` option requests verbose output to be printed.
-*	The `--auto` option will only process files with an imaginary frequency. Given any number of files it will ignore those that have no imaginary frequencies.
-* The `-f` or `--freq` option allows you to request motion along a particular frequency (in cm-1).
-* The `--freqnum` option allows you to request motion along a particular frequency (by number from the lowest).
+## Installation
 
+**Via PyPI (recommended):**
+```bash
+pip install pyqrc
+```
 
-### Dependencies
-* [Python](https://www.python.org/) >= v. 3.6
-* [cclib]([https://www.python.org/](https://cclib.github.io/))
-* One of:
-   * [ORCA](https://sites.google.com/site/orcainputlibrary/home/) > v. 4.0
-   * [Gaussian09](https://gaussian.com/glossary/g09/)
-   * [Gaussian16](https://gaussian.com/gaussian16/)
-   * [QChem](https://www.q-chem.com/) > 5.4
+**From source:**
+Clone the repository https://github.com/patonlab/pyQRC.git and add to your PYTHONPATH variable.
 
-### Example 1
+Then run the script as a Python module with your computational chemistry output files (the program expects `.log` or `.out` extensions) and can accept wildcard arguments.
 
-```python
+## Usage
+
+```bash
+python -m pyqrc [options] <output_file(s)>
+```
+
+### Command Line Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--amp AMPLITUDE` | Multiplier for the imaginary normal mode vector. Increase for larger displacements; use negative values for reverse direction. | `0.2` |
+| `--nproc N` | Number of processors requested in the new input file. | `1` |
+| `--mem NGB` | Memory requested in the new input file. Format: `XGB` or `X000MB`. | `4GB` |
+| `--route 'THEORY/BASIS'` | Route line for the new calculation. | Same as original |
+| `--name SUFFIX` | String appended to the filename for new input file(s). | `QRC` |
+| `-v` | Verbose output. | Enabled |
+| `--auto` | Only process files with imaginary frequencies, skip others. | Disabled |
+| `-f, --freq VALUE` | Displace along a specific frequency (in cm⁻¹). | All imaginary |
+| `--freqnum N` | Displace along frequency number N (from lowest). | All imaginary |
+| `--qcoord` | Automatic single point calculations along normal modes. | Disabled |
+| `--nummodes N` | Number of modes for `--qcoord` calculations. | `all` |
+
+## Output Files
+
+pyQRC generates the following files:
+
+- **`<filename>_QRC.com`** (Gaussian) or **`<filename>_QRC.inp`** (ORCA/Q-Chem): New input file with displaced geometry ready for optimization.
+- **`<filename>_QRC.qrc`**: Summary file containing:
+  - Original geometry
+  - Harmonic frequencies, reduced masses, and force constants
+  - Normal mode displacement vectors
+  - Mass-weighted Cartesian displacement magnitude
+
+## Dependencies
+
+- [Python](https://www.python.org/) >= 3.9
+- [cclib](https://cclib.github.io/)
+- [NumPy](https://numpy.org/)
+- One of the following computational chemistry packages:
+  - [Gaussian09](https://gaussian.com/glossary/g09/) / [Gaussian16](https://gaussian.com/gaussian16/)
+  - [ORCA](https://sites.google.com/site/orcainputlibrary/home/) >= 4.0
+  - [Q-Chem](https://www.q-chem.com/) >= 5.4
+
+## Examples
+
+### Example 1: Remove an Unwanted Imaginary Frequency
+
+```bash
 python -m pyqrc acetaldehyde.log --nproc 4 --mem 8GB
 ```
 
 This initial optimization inadvertently produced a transition structure. The code displaces along the normal mode and creates a new input file. A subsequent optimization then fixes the problem since the imaginary frequency disappears. Note that by default this displacement occurs along all imaginary modes - if there is more than one imaginary frequency, and displacement is only desired along one of these (e.g. the lowest) then the use of `--freqnum 1` is necessary.
 
+### Example 2: Map a Reaction Coordinate (QRC)
 
-### Example 2
-
-```python
+```bash
 python -m pyqrc claisen_ts.log --nproc 4 --mem 8GB --amp 0.3 --name QRCF
 python -m pyqrc claisen_ts.log --nproc 4 --mem 8GB --amp -0.3 --name QRCR
 ```
 
-The initial optimization located a transition structure. The quick reaction coordinate (QRC) is obtained from two optmizations, started from twp points displaced along the reaction coordinate in either direction.
+The initial optimization located a transition structure. The quick reaction coordinate (QRC) is obtained from two optimizations, started from two points displaced along the reaction coordinate in either direction.
 
+### Example 3: Conformational Sampling via Normal Mode Displacement
 
-### Example 3
-
-```python
+```bash
 python -m pyqrc planar_chex.log --nproc 4 --freqnum 1 --name mode1
 python -m pyqrc planar_chex.log --nproc 4 --freqnum 3 --name mode3
 ```
 
-In this example, the initial optimization located a (3rd order) saddle point - planar cyclohexane - with three imaginary frequencies. Two new inputs are created by displacing along (i) only the first (i.e., lowest) normal mode and (ii) only the third normal mode. This contrasts from the `auto` function of pyQRC which displaces along all imaginary modes. Subsequent optimizations of these new inputs results in different minima, producing (i) chair-shaped cyclohexane and (ii) twist-boat cyclohexane. This example illustrates that displacement along particular normal modes could be used for e.g. conformational sampling.
+In this example, the initial optimization located a (3rd order) saddle point - planar cyclohexane - with three imaginary frequencies. Two new inputs are created by displacing along (i) only the first (i.e., lowest) normal mode and (ii) only the third normal mode. This contrasts from the `--auto` function of pyQRC which displaces along all imaginary modes. Subsequent optimizations of these new inputs results in different minima, producing (i) chair-shaped cyclohexane and (ii) twist-boat cyclohexane. This example illustrates that displacement along particular normal modes could be used for e.g. conformational sampling.
 
+## Citation
 
-### References for the underlying theory
+If you use pyQRC in your research, please cite:
+
+[![DOI](https://zenodo.org/badge/138228684.svg)](https://zenodo.org/badge/latestdoi/138228684)
+
+Paton, R. S. *pyQRC*. **2018**, https://doi.org/10.5281/zenodo.1407814
+
+## References
+
 1. (a) Goodman, J. M.; Silva, M. A. *Tetrahedron Lett.* **2003**, *44*, 8233-8236 [**DOI:** 10.1016/j.tetlet.2003.09.074](http://dx.doi.org/10.1016/j.tetlet.2003.09.074); (b) Goodman, J. M.; Silva, M. A. *Tetrahedron Lett.* **2005**, *46*, 2067-2069 [**DOI:** 10.1016/j.tetlet.2005.01.142](http://dx.doi.org/10.1016/j.tetlet.2005.01.142)
 
-
-### Contributors
+## Contributors
 
 - Robert Paton ([@bobbypaton](https://github.com/bobbypaton))
 - Guilian Luchini ([@luchini18](https://github.com/luchini18))

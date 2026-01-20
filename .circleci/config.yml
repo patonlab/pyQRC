@@ -1,0 +1,32 @@
+version: 2.1
+
+orbs:
+  codecov: codecov/codecov@5
+
+jobs:
+  test:
+    parameters:
+      python-version:
+        type: string
+    docker:
+      - image: cimg/python:<< parameters.python-version >>
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: |
+            pip install --upgrade pip
+            pip install -e ".[dev]"
+      - run:
+          name: Run tests with coverage
+          command: pytest --cov=pyqrc --cov-report=xml -v
+      - codecov/upload:
+          files: coverage.xml
+
+workflows:
+  test:
+    jobs:
+      - test:
+          matrix:
+            parameters:
+              python-version: ["3.9", "3.10", "3.11", "3.12"]

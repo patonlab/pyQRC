@@ -1,7 +1,7 @@
 %chk=claisen_ts.chk
-%nprocshared=4
-%mem=8GB
-# opt(ts,calcfc,noeigentest) freq b3lyp/6-31g(d)
+%nprocshared=16
+%mem=72GB
+# opt(ts,calcfc,noeigentest) freq=noraman wb97xd/6-31+G* 
 
 transition structure
 
