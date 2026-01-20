@@ -1,0 +1,30 @@
+$molecule
+0 1
+C   0.240326   0.413829   0.000001
+O   1.219313  -0.288679  -0.000000
+H   0.343887   1.518668  -0.000001
+C  -1.168223  -0.135556   0.000001
+H  -1.917481   0.657732   0.000065
+H  -1.306786  -0.768245  -0.881565
+H  -1.306745  -0.768357   0.881492
+$end
+
+$rem
+   JOBTYPE           OPT      ! Optimize the geometry
+   METHOD            M062X    ! Use the M06-2X functional
+   DFT_D             D3       ! Apply Grimme's D3 dispersion with zero-damping
+   BASIS             6-31G**  ! Triple-zeta basis set with polarization
+$end
+
+@@@
+
+$molecule
+   read
+$end
+
+$rem
+   JOBTYPE           FREQ     ! Calculate vibrational frequencies
+   METHOD            M062X
+   DFT_D             D3
+   BASIS             6-31G**
+$end

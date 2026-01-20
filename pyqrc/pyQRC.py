@@ -1,468 +1,769 @@
 #!/usr/bin/python
-from __future__ import print_function, absolute_import
+"""
+pyQRC.py - A Python implementation of Silva and Goodman's QRC approach.
 
-#######################################################################
-#                             pyQRC.py                                #
-#  A Python implementation of Silva and Goodman's QRC approach        #
-#  From a Gaussian frequency calculation it is possible to create     #
-#  new input files which are displaced along any normal modes which   #
-#  have an imaginary frequency.                                       #
-#######################################################################
-__version__ = '2.0' # last modified May 5 2018
+From a computational chemistry frequency calculation, it is possible to create
+new input files which are displaced along any normal modes which have an
+imaginary frequency.
+
+Based on: Goodman, J. M.; Silva, M. A. Tet. Lett. 2003, 44, 8233-8236;
+          Tet. Lett. 2005, 46, 2067-2069.
+"""
+
+__version__ = '2.1'
 __author__ = 'Robert Paton'
-__email__= 'robert.paton@colostate.edu'
-#######################################################################
+__email__ = 'robert.paton@colostate.edu'
 
-#Python Libraries
-import sys, os, re
-from glob import glob
-from optparse import OptionParser
-import cclib
-import numpy as np
+import os
+import re
 import shutil
 import subprocess
+import sys
+from argparse import ArgumentParser
+from glob import glob
+from pathlib import Path
+from typing import Optional
 
-#Some useful arrays
-periodictable = ["","H","He","Li","Be","B","C","N","O","F","Ne","Na","Mg","Al","Si","P","S","Cl","Ar","K","Ca","Sc","Ti","V","Cr","Mn","Fe","Co","Ni","Cu","Zn","Ga","Ge","As","Se","Br","Kr","Rb","Sr","Y","Zr",
-    "Nb","Mo","Tc","Ru","Rh","Pd","Ag","Cd","In","Sn","Sb","Te","I","Xe","Cs","Ba","La","Ce","Pr","Nd","Pm","Sm","Eu","Gd","Tb","Dy","Ho","Er","Tm","Yb","Lu","Hf","Ta","W","Re","Os","Ir","Pt","Au","Hg","Tl",
-    "Pb","Bi","Po","At","Rn","Fr","Ra","Ac","Th","Pa","U","Np","Pu","Am","Cm","Bk","Cf","Es","Fm","Md","No","Lr","Rf","Db","Sg","Bh","Hs","Mt","Ds","Rg","Uub","Uut","Uuq","Uup","Uuh","Uus","Uuo"]
+import cclib
+import numpy as np
 
-atomic_masses = [0.0, 1.007825, 4.00, 7.00, 9.00,\
-                 11.00,  12.01, 14.0067, 15.9994,\
-                 19.00, 20.180, 22.990,  24.305,\
-                  26.982, 28.086, 30.973762, 31.972071,\
-                  35.453, 39.948, 39.098, 40.078,\
-                  44.956, 47.867, 50.942, 51.996,\
-                  54.938, 55.845,58.933,  58.693,\
-                  63.546, 65.38, 69.723,  72.631,\
-                  74.922, 78.971, 79.904, 84.798,\
-                  84.468, 87.62, 88.906, 91.224,\
-                  92.906, 95.95, 98.907, 101.07,\
-                  102.906, 106.42, 107.868, 112.414,\
-                  114.818, 118.711, 121.760, 126.7,\
-                  126.904, 131.294, 132.905, 137.328,\
-                  138.905, 140.116, 140.908, 144.243,\
-                  144.913, 150.36, 151.964, 157.25,\
-                  158.925, 162.500, 164.930, 167.259,\
-                  168.934, 173.055, 174.967, 178.49,\
-                  180.948, 183.84, 186.207, 190.23,\
-                  192.217, 195.085, 196.967, 200.592,\
-                  204.383, 207.2, 208.980, 208.982,\
-                  209.987, 222.081, 223.020, 226.025,\
-                  227.028, 232.038, 231.036, 238.029,\
-                  237, 244, 243, 247, 247,\
-                  251, 252, 257, 258, 259,\
-                  262, 261, 262, 266, 264,\
-                  269, 268, 271, 272, 285,\
-                  284, 289, 288, 292, 294,\
-                  294]
+# Constants
+BOHR_TO_ANGSTROM = 1.88972612456506
+DEFAULT_AMPLITUDE = 0.2
+DEFAULT_NPROC = 1
+DEFAULT_MEMORY = "4GB"
+DEFAULT_SUFFIX = "QRC"
 
-rcov = {"H": 0.32,"He": 0.46,
-	"Li":1.33,"Be":1.02,"B":0.85,"C":0.75,"N":0.71,"O":0.63,"F":0.64,"Ne":0.67,
-	"Na":1.55,"Mg":1.39,"Al":1.26, "Si":1.16,"P":1.11,"S":1.03,"Cl":0.99, "Ar":0.96,
-	"K":1.96,"Ca":1.71,"Sc": 1.48, "Ti": 1.36, "V": 1.34, "Cr": 1.22, "Mn":1.19, "Fe":1.16, "Co":1.11, "Ni":1.10,"Zn":1.18, "Ga":1.24, "Ge":1.21, "As":1.21, "Se":1.16, "Br":1.14, "Kr":1.17,
-	"Rb":2.10, "Sr":1.85,"Y":1.63, "Zr":1.54, "Nb":1.47, "Mo":1.38, "Tc":1.28, "Ru":1.25,"Rh":1.25,"Pd":1.20,"Ag":1.28,"Cd":1.36, "In":1.42, "Sn":1.40,"Sb":1.40,"Te":1.36,"I":1.33,"Xe":1.31}
+# Periodic table of elements (index = atomic number)
+PERIODIC_TABLE = [
+    "", "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", "Na", "Mg", "Al",
+    "Si", "P", "S", "Cl", "Ar", "K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe",
+    "Co", "Ni", "Cu", "Zn", "Ga", "Ge", "As", "Se", "Br", "Kr", "Rb", "Sr", "Y",
+    "Zr", "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd", "In", "Sn", "Sb", "Te",
+    "I", "Xe", "Cs", "Ba", "La", "Ce", "Pr", "Nd", "Pm", "Sm", "Eu", "Gd", "Tb",
+    "Dy", "Ho", "Er", "Tm", "Yb", "Lu", "Hf", "Ta", "W", "Re", "Os", "Ir", "Pt",
+    "Au", "Hg", "Tl", "Pb", "Bi", "Po", "At", "Rn", "Fr", "Ra", "Ac", "Th", "Pa",
+    "U", "Np", "Pu", "Am", "Cm", "Bk", "Cf", "Es", "Fm", "Md", "No", "Lr", "Rf",
+    "Db", "Sg", "Bh", "Hs", "Mt", "Ds", "Rg", "Uub", "Uut", "Uuq", "Uup", "Uuh",
+    "Uus", "Uuo"
+]
 
-def elementID(massno):
-        if massno < len(periodictable): return periodictable[massno]
-        else: return "XX"
+# Atomic masses (index = atomic number)
+ATOMIC_MASSES = [
+    0.0, 1.007825, 4.00, 7.00, 9.00, 11.00, 12.01, 14.0067, 15.9994, 19.00,
+    20.180, 22.990, 24.305, 26.982, 28.086, 30.973762, 31.972071, 35.453,
+    39.948, 39.098, 40.078, 44.956, 47.867, 50.942, 51.996, 54.938, 55.845,
+    58.933, 58.693, 63.546, 65.38, 69.723, 72.631, 74.922, 78.971, 79.904,
+    84.798, 84.468, 87.62, 88.906, 91.224, 92.906, 95.95, 98.907, 101.07,
+    102.906, 106.42, 107.868, 112.414, 114.818, 118.711, 121.760, 126.7,
+    126.904, 131.294, 132.905, 137.328, 138.905, 140.116, 140.908, 144.243,
+    144.913, 150.36, 151.964, 157.25, 158.925, 162.500, 164.930, 167.259,
+    168.934, 173.055, 174.967, 178.49, 180.948, 183.84, 186.207, 190.23,
+    192.217, 195.085, 196.967, 200.592, 204.383, 207.2, 208.980, 208.982,
+    209.987, 222.081, 223.020, 226.025, 227.028, 232.038, 231.036, 238.029,
+    237, 244, 243, 247, 247, 251, 252, 257, 258, 259, 262, 261, 262, 266, 264,
+    269, 268, 271, 272, 285, 284, 289, 288, 292, 294, 294
+]
 
-# Enables output to terminal and to text file
+# Covalent radii (Angstroms)
+COVALENT_RADII = {
+    "H": 0.32, "He": 0.46, "Li": 1.33, "Be": 1.02, "B": 0.85, "C": 0.75,
+    "N": 0.71, "O": 0.63, "F": 0.64, "Ne": 0.67, "Na": 1.55, "Mg": 1.39,
+    "Al": 1.26, "Si": 1.16, "P": 1.11, "S": 1.03, "Cl": 0.99, "Ar": 0.96,
+    "K": 1.96, "Ca": 1.71, "Sc": 1.48, "Ti": 1.36, "V": 1.34, "Cr": 1.22,
+    "Mn": 1.19, "Fe": 1.16, "Co": 1.11, "Ni": 1.10, "Zn": 1.18, "Ga": 1.24,
+    "Ge": 1.21, "As": 1.21, "Se": 1.16, "Br": 1.14, "Kr": 1.17, "Rb": 2.10,
+    "Sr": 1.85, "Y": 1.63, "Zr": 1.54, "Nb": 1.47, "Mo": 1.38, "Tc": 1.28,
+    "Ru": 1.25, "Rh": 1.25, "Pd": 1.20, "Ag": 1.28, "Cd": 1.36, "In": 1.42,
+    "Sn": 1.40, "Sb": 1.40, "Te": 1.36, "I": 1.33, "Xe": 1.31
+}
+
+
+def element_id(mass_no: int) -> str:
+    """Convert atomic number to element symbol.
+
+    Args:
+        mass_no: Atomic number (Z).
+
+    Returns:
+        Element symbol string, or "XX" if atomic number is out of range.
+    """
+    if mass_no < len(PERIODIC_TABLE):
+        return PERIODIC_TABLE[mass_no]
+    return "XX"
+
+
 class Logger:
-   # Designated initializer
-   def __init__(self,filein,suffix,append):
-      # Create the log file at the input path
-      self.log = open(filein+"_"+append+"."+suffix,'w')
-   # Write a message only to the log and not to the terminal
-   def Writeonlyfile(self, message):
-       self.log.write(message+"\n")
+    """File logger for writing QRC output files.
 
-#Read data from an output file - data not currently provided by cclib
-class getoutData:
-    def __init__(self, file):
+    Supports context manager protocol for proper file handling.
+    """
+
+    def __init__(self, filein: str, suffix: str, append: str):
+        """Initialize logger with output file.
+
+        Args:
+            filein: Base filename (without extension).
+            suffix: File extension.
+            append: String to append to filename before extension.
+        """
+        self.filepath = f"{filein}_{append}.{suffix}"
+        self.log = open(self.filepath, 'w')
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, _exc_type, _exc_val, _exc_tb):
+        self.close()
+        return False
+
+    def write(self, message: str) -> None:
+        """Write a message to the log file.
+
+        Args:
+            message: Text to write (newline appended automatically).
+        """
+        self.log.write(message + "\n")
+
+    def close(self) -> None:
+        """Close the log file."""
+        if self.log and not self.log.closed:
+            self.log.close()
+
+
+class OutputData:
+    """Parse computational chemistry output files for job metadata.
+
+    Extracts format, job type, level of theory, and termination status
+    from Gaussian, ORCA, and Q-Chem output files.
+    """
+
+    def __init__(self, file: str):
+        """Parse output file for metadata.
+
+        Args:
+            file: Path to output file.
+
+        Raises:
+            FileNotFoundError: If the output file does not exist.
+        """
         if not os.path.exists(file):
-            print(("\nFATAL ERROR: Output file [ %s ] does not exist"%file))
+            raise FileNotFoundError(f"Output file [{file}] does not exist")
 
-        def getFORMAT(self, outlines):
-            for i in range(0,len(outlines)):
-                if outlines[i].find('Gaussian, Inc.') > -1: self.format = "Gaussian"
-                if outlines[i].find('* O   R   C   A *') > -1: self.format = "ORCA"
-                if outlines[i].find('Q-Chem, Inc.') > -1: self.format = "QChem"
+        self.file = file
+        self.format: Optional[str] = None
+        self.JOBTYPE: Optional[str] = None
+        self.LEVELOFTHEORY: Optional[str] = None
+        self.TERMINATION: Optional[str] = None
 
-        def level_of_theory(file):
-            """Read output for the level of theory and basis set used."""
-            repeated_theory = 0
-            with open(file) as f:
-                data = f.readlines()
-            level, bs = 'none', 'none'
+        with open(file, 'r') as f:
+            outlines = f.readlines()
 
-            for line in data:
-                if line.strip().find('External calculation') > -1:
-                    level, bs = 'ext', 'ext'
-                    break
-                if '\\Freq\\' in line.strip() and repeated_theory == 0:
-                    try:
-                        level, bs = (line.strip().split("\\")[4:6])
-                        repeated_theory = 1
-                    except IndexError:
-                        pass
-                elif '|Freq|' in line.strip() and repeated_theory == 0:
-                    try:
-                        level, bs = (line.strip().split("|")[4:6])
-                        repeated_theory = 1
-                    except IndexError:
-                        pass
-                if '\\SP\\' in line.strip() and repeated_theory == 0:
-                    try:
-                        level, bs = (line.strip().split("\\")[4:6])
-                        repeated_theory = 1
-                    except IndexError:
-                        pass
-                elif '|SP|' in line.strip() and repeated_theory == 0:
-                    try:
-                        level, bs = (line.strip().split("|")[4:6])
-                        repeated_theory = 1
-                    except IndexError:
-                        pass
-                if 'DLPNO BASED TRIPLES CORRECTION' in line.strip():
-                    level = 'DLPNO-CCSD(T)'
-                if 'Estimated CBS total energy' in line.strip():
-                    try:
-                        bs = ("Extrapol." + line.strip().split()[4])
-                    except IndexError:
-                        pass
-                # Remove the restricted R or unrestricted U label
-                if level[0] in ('R', 'U'):
-                    level = level[1:]
-            level_of_theory = '/'.join([level, bs])
-            return level_of_theory
+        self._get_format(outlines)
+        self._get_jobtype(outlines)
+        self._get_termination(outlines)
 
-        def getJOBTYPE(self, outlines):
-            if self.format == "Gaussian":
-                level = "none"; bs = "none"
-                for i in range(0,len(outlines)):
-                    if outlines[i].strip().find('----------') > -1:
-                        if outlines[i+1].strip().find('#') > -1:
-                            self.JOBTYPE = ''
-                            for j in range(i+1,len(outlines)):
-                                if outlines[j].strip().find('----------') > -1:
-                                    break
-                                else:
-                                    self.JOBTYPE = self.JOBTYPE+re.sub('#','',outlines[j].strip())
-                            self.JOBTYPE = re.sub(r' geom=\S+','',self.JOBTYPE)
-                            self.LEVELOFTHEORY = level_of_theory(file)
-                            break
-            if self.format == "ORCA":
-                level = "none"; bs = "none"
-                for i in range(0,len(outlines)):
-                    if outlines[i].strip().find('> !') > -1:
-                        self.JOBTYPE = outlines[i].strip().split('> !')[1].lstrip()
-                        self.LEVELOFTHEORY = level_of_theory(file)
+    def _get_format(self, outlines: list[str]) -> None:
+        """Detect the computational chemistry package from output.
+
+        Args:
+            outlines: List of lines from output file.
+        """
+        for line in outlines:
+            if 'Gaussian, Inc.' in line:
+                self.format = "Gaussian"
+                return
+            if '* O   R   C   A *' in line:
+                self.format = "ORCA"
+                return
+            if 'Q-Chem, Inc.' in line:
+                self.format = "QChem"
+                return
+
+    def _level_of_theory(self) -> str:
+        """Read output for the level of theory and basis set used.
+
+        Returns:
+            String in format "level/basis_set".
+        """
+        repeated_theory = 0
+        with open(self.file) as f:
+            data = f.readlines()
+        level, bs = 'none', 'none'
+
+        for line in data:
+            if 'External calculation' in line.strip():
+                level, bs = 'ext', 'ext'
+                break
+            if '\\Freq\\' in line.strip() and repeated_theory == 0:
+                try:
+                    level, bs = (line.strip().split("\\")[4:6])
+                    repeated_theory = 1
+                except IndexError:
+                    pass
+            elif '|Freq|' in line.strip() and repeated_theory == 0:
+                try:
+                    level, bs = (line.strip().split("|")[4:6])
+                    repeated_theory = 1
+                except IndexError:
+                    pass
+            if '\\SP\\' in line.strip() and repeated_theory == 0:
+                try:
+                    level, bs = (line.strip().split("\\")[4:6])
+                    repeated_theory = 1
+                except IndexError:
+                    pass
+            elif '|SP|' in line.strip() and repeated_theory == 0:
+                try:
+                    level, bs = (line.strip().split("|")[4:6])
+                    repeated_theory = 1
+                except IndexError:
+                    pass
+            if 'DLPNO BASED TRIPLES CORRECTION' in line.strip():
+                level = 'DLPNO-CCSD(T)'
+            if 'Estimated CBS total energy' in line.strip():
+                try:
+                    bs = "Extrapol." + line.strip().split()[4]
+                except IndexError:
+                    pass
+            # Remove the restricted R or unrestricted U label
+            if level != 'none' and level[0] in ('R', 'U'):
+                level = level[1:]
+
+        return f"{level}/{bs}"
+
+    def _get_jobtype(self, outlines: list[str]) -> None:
+        """Extract job type and level of theory from output.
+
+        Args:
+            outlines: List of lines from output file.
+        """
+        if self.format == "Gaussian":
+            for i, line in enumerate(outlines):
+                if line.strip().find('----------') > -1:
+                    if outlines[i + 1].strip().find('#') > -1:
+                        self.JOBTYPE = ''
+                        for j in range(i + 1, len(outlines)):
+                            if outlines[j].strip().find('----------') > -1:
+                                break
+                            self.JOBTYPE += re.sub('#', '', outlines[j].strip())
+                        self.JOBTYPE = re.sub(r' geom=\S+', '', self.JOBTYPE)
+                        self.LEVELOFTHEORY = self._level_of_theory()
                         break
 
-        def getTERMINATION(self, outlines):
-                    if self.format == "Gaussian":
-                      for i in range(0,len(outlines)):
-                                    if outlines[i].find("Normal termination") > -1:
-                                            self.TERMINATION = "normal"
+        elif self.format == "ORCA":
+            for line in outlines:
+                if '> !' in line.strip():
+                    self.JOBTYPE = line.strip().split('> !')[1].lstrip()
+                    self.LEVELOFTHEORY = self._level_of_theory()
+                    break
 
-        outfile = open(file,"r")
-        outlines = outfile.readlines()
-        getFORMAT(self, outlines)
-        getJOBTYPE(self, outlines)
-        getTERMINATION(self, outlines)
+    def _get_termination(self, outlines: list[str]) -> None:
+        """Check if calculation terminated normally.
+
+        Args:
+            outlines: List of lines from output file.
+        """
+        if self.format == "Gaussian":
+            for line in outlines:
+                if "Normal termination" in line:
+                    self.TERMINATION = "normal"
+                    return
 
 
-# compute mass-weighted Cartesian displacment between two structures (bohr amu^1/2)
-def mwdist(coords1, coords2, elements):
-    dist = 0
+def mwdist(coords1: np.ndarray, coords2: np.ndarray, elements: list[int]) -> float:
+    """Compute mass-weighted Cartesian displacement between two structures.
 
+    Args:
+        coords1: First set of atomic coordinates (N x 3 array).
+        coords2: Second set of atomic coordinates (N x 3 array).
+        elements: List of atomic numbers for each atom.
+
+    Returns:
+        Mass-weighted distance in bohr * amu^(1/2).
+    """
+    dist = 0.0
     for n, atom in enumerate(elements):
+        dist += ATOMIC_MASSES[atom] * (np.linalg.norm(coords1[n] - coords2[n])) ** 2
 
-        dist += atomic_masses[atom] * (np.linalg.norm(coords1[n] - coords2[n])) ** 2
-        #print(coords1[n], coords2[n], atomic_masses[atom] ** 0.5, (np.linalg.norm(coords1[n] - coords2[n])))
-        #print(atomic_masses[atom] ** 0.5 * (np.linalg.norm(coords1[n] - coords2[n])))
-        #print((np.linalg.norm(coords1[n] - coords2[n])), dist)
+    return BOHR_TO_ANGSTROM * dist ** 0.5
 
-    dist = 1.88972612456506 * dist ** 0.5
 
-    return dist
+def gen_overlap(mol_atoms: list[str], coords: np.ndarray, covfrac: float) -> np.ndarray:
+    """Generate overlap matrix based on covalent radii.
 
-class gen_qrc:
-   def __init__(self, file, amplitude, nproc, mem, route, verbose, suffix, val, num):
+    Args:
+        mol_atoms: List of element symbols.
+        coords: Atomic coordinates (N x 3 array).
+        covfrac: Fraction of covalent radii sum to use as overlap threshold.
 
-        # parse compchem output with cclib
+    Returns:
+        Upper triangular matrix where 1 indicates overlapping atoms.
+    """
+    n_atoms = len(mol_atoms)
+    over_mat = np.zeros((n_atoms, n_atoms))
+
+    for i, atom_i in enumerate(mol_atoms):
+        for j, atom_j in enumerate(mol_atoms):
+            if j > i:
+                rcov_ij = COVALENT_RADII.get(atom_i, 1.5) + COVALENT_RADII.get(atom_j, 1.5)
+                dist_ij = np.linalg.norm(np.array(coords[i]) - np.array(coords[j]))
+                if dist_ij / rcov_ij < covfrac:
+                    over_mat[i][j] = 1
+
+    return over_mat
+
+
+def check_overlap(atom_types: list[str], coords: np.ndarray, covfrac: float = 0.8) -> bool:
+    """Check if any atoms overlap based on covalent radii.
+
+    Args:
+        atom_types: List of element symbols.
+        coords: Atomic coordinates (N x 3 array).
+        covfrac: Fraction of covalent radii sum to use as overlap threshold.
+
+    Returns:
+        True if any atoms overlap, False otherwise.
+    """
+    over_mat = gen_overlap(atom_types, coords, covfrac)
+    return bool(np.any(over_mat))
+
+
+class QRCGenerator:
+    """Generate Quick Reaction Coordinate displaced structures.
+
+    Takes a frequency calculation output and generates new input files
+    with geometries displaced along specified normal modes.
+    """
+
+    def __init__(
+        self,
+        file: str,
+        amplitude: float,
+        nproc: int,
+        mem: str,
+        route: Optional[str],
+        verbose: bool,
+        suffix: str,
+        val: Optional[float],
+        num: Optional[int]
+    ):
+        """Initialize QRC generator and create displaced structure.
+
+        Args:
+            file: Path to frequency calculation output file.
+            amplitude: Displacement amplitude along normal modes.
+            nproc: Number of processors for new calculation.
+            mem: Memory allocation string (e.g., "4GB").
+            route: Calculation route/keywords (None to clone from input).
+            verbose: Whether to write detailed output file.
+            suffix: Suffix to append to output filename.
+            val: Specific frequency value (cm^-1) to displace along.
+            num: Specific mode number to displace along (1-indexed).
+        """
+        # Parse computational chemistry output with cclib
         parser = cclib.io.ccopen(file)
         data = parser.parse()
 
-        #try:
-        nat, charge, atomnos = data.natom, data.charge, data.atomnos
+        file_path = Path(file)
+
+        nat = data.natom
+        charge = data.charge
+        atomnos = data.atomnos
+
         try:
-            mult = data.mult 
-        except:
-            AttributeError 
-            mult = '1'    # surface level workaround to set default value of multiplicity to 1 if not parsed properly by cclib
+            mult = data.mult
+        except AttributeError:
+            mult = 1
             print('Warning - multiplicity not parsed from input: defaulted to 1 in input files')
-        elements = [periodictable[z] for z in atomnos]
+
+        elements = [PERIODIC_TABLE[z] for z in atomnos]
         cartesians = data.atomcoords[-1]
-        freq, disps = data.vibfreqs, data.vibdisps
+        freq = data.vibfreqs
+        disps = data.vibdisps
         nmodes = len(freq)
-        if hasattr(data, 'vibrmasses'): rmass = data.vibrmasses
-        else: rmass = [0.0] * nmodes
-        if hasattr(data, 'vibfconsts'): fconst = data.vibfconsts
-        else: fconst = [0.0] * nmodes
 
-        self.CARTESIAN = []
-        for atom in range(0,nat):
-            self.CARTESIAN.append([cartesians[atom][0], cartesians[atom][1], cartesians[atom][2]])
+        rmass = data.vibrmasses if hasattr(data, 'vibrmasses') else [0.0] * nmodes
+        fconst = data.vibfconsts if hasattr(data, 'vibfconsts') else [0.0] * nmodes
 
-        # Write an output file
-        if verbose: log = Logger(file.split(".")[0],"qrc", suffix)
-
-        # The molecular data as read in from the frequency calculation, including atomic masses
-        if verbose:
-            log.Writeonlyfile(' pyQRC - a quick alternative to IRC calculations')
-            log.Writeonlyfile(' version: '+__version__+' / author: '+__author__+' / email: '+__email__)
-            log.Writeonlyfile(' Based on: Goodman, J. M.; Silva, M. A. Tet. Lett. 2003, 44, 8233-8236; Tet. Lett. 2005, 46, 2067-2069.\n')
-            log.Writeonlyfile('                -----ORIGINAL GEOMETRY------')
-            log.Writeonlyfile('{0:>4} {1:>9} {2:>9} {3:>9} {4:>9}'.format('', '', 'X', 'Y', 'Z'))
-            for atom in range(0,nat):
-                log.Writeonlyfile('{0:>4} {1:>9} {2:9.6f} {3:9.6f} {4:9.6f}'.format(elements[atom], '', cartesians[atom][0], cartesians[atom][1], cartesians[atom][2]))
-            log.Writeonlyfile('\n                ----HARMONIC FREQUENCIES----')
-            log.Writeonlyfile('{0:>24} {1:>9} {2:>9}'.format('Freq', 'Red mass', 'F const'))
-            for mode in range(0,nmodes):
-                log.Writeonlyfile('{0:24.4f} {1:9.4f} {2:9.4f}'.format(freq[mode], rmass[mode], fconst[mode]))
-
-        shift = []
-
-        # Save the original Cartesian coordinates before they are altered
-        orig_carts = []
-        for atom in range(0,nat):
-            orig_carts.append([cartesians[atom][0], cartesians[atom][1], cartesians[atom][2]])
-
-        # Based on user input select the appropriate displacements
-        for mode, wn in enumerate(freq):
-
-            # Either moves along any and all imaginary freqs, or a specific mode requested by the user
-            if wn < 0.0 and val == None and num == None:
-                shift.append(amplitude)
-                if verbose:
-                    log.Writeonlyfile('\n                -SHIFTING ALONG NORMAL MODE-')
-                    log.Writeonlyfile('                -AMPLIFIER = '+str(shift[mode]))
-
-                    log.Writeonlyfile('{0:>4} {1:>9} {2:>9} {3:>9} {4:>9}'.format('', '', 'X', 'Y', 'Z'))
-                    for atom in range(0,nat):
-                        log.Writeonlyfile('{0:>4} {1:>9} {2:9.6f} {3:9.6f} {4:9.6f}'.format(elements[atom], '', disps[mode][atom][0], disps[mode][atom][1], disps[mode][atom][2]))
-
-            elif wn == val or mode+1 == num:
-                # print(wn, num)
-                shift.append(amplitude)
-                if verbose:
-                    log.Writeonlyfile('\n                -SHIFTING ALONG NORMAL MODE-')
-                    log.Writeonlyfile('                -AMPLIFIER = '+str(shift[mode]))
-
-                    log.Writeonlyfile('{0:>4} {1:>9} {2:>9} {3:>9} {4:>9}'.format('', '', 'X', 'Y', 'Z'))
-                    for atom in range(0,nat):
-                        log.Writeonlyfile('{0:>4} {1:>9} {2:9.6f} {3:9.6f} {4:9.6f}'.format(elements[atom], '', disps[mode][atom][0], disps[mode][atom][1], disps[mode][atom][2]))
-            else: shift.append(0.0)
-
-            # This is where a perturbed structure is generated
-            # The starting geometry is displaced along the each normal mode multipled by a user-specified amplitude
-            for atom in range(0,nat):
-                for coord in range(0,3):
-                    cartesians[atom][coord] = cartesians[atom][coord] + disps[mode][atom][coord] * shift[mode]
-
-        # useful information
-        self.NEW_CARTESIAN = cartesians
+        self.CARTESIAN = cartesians.copy()
         self.ATOMTYPES = elements
 
-        # Record by how much the structure has been altered
+        # Write verbose output file
+        log = None
+        if verbose:
+            log = Logger(file_path.stem, "qrc", suffix)
+            self._write_header(log, elements, cartesians, nat, freq, rmass, fconst, nmodes)
+
+        # Note: Original coordinates are stored in self.CARTESIAN
+
+        # Calculate shifts based on user input
+        shift = self._calculate_shifts(
+            freq, amplitude, val, num, verbose, log, elements, disps, nat
+        )
+
+        # Apply displacements to generate perturbed structure
+        for mode in range(nmodes):
+            for atom in range(nat):
+                for coord in range(3):
+                    cartesians[atom][coord] += disps[mode][atom][coord] * shift[mode]
+
+        self.NEW_CARTESIAN = cartesians
+
+        # Record structure displacement
         mw_distance = mwdist(self.NEW_CARTESIAN, self.CARTESIAN, atomnos)
-        log.Writeonlyfile('\n   STRUCTURE MOVED BY {:.3f} Bohr amu^1/2 \n'.format(mw_distance))
+        if verbose and log:
+            log.write(f'\n   STRUCTURE MOVED BY {mw_distance:.3f} Bohr amu^1/2 \n')
 
-        # Create a new compchem input file
+        # Get output format and job specification
+        format_type = None
+        func = None
+        basis = None
+
         if hasattr(data, 'metadata'):
-            try: format = data.metadata['package']
-            except: format = None
-            try: func = data.metadata['functional']
-            except: func = None
-            try: basis = data.metadata['basis_set']
-            except: basis = None
+            format_type = data.metadata.get('package')
+            func = data.metadata.get('functional')
+            basis = data.metadata.get('basis_set')
 
-        # if not specified, the job specification will be cloned from the previous calculation
-        # In practice this works better than cclib metadata so is the default for now
-        gdata = getoutData(file)
+        gdata = OutputData(file)
 
-        if format == None: format = gdata.format
-        if route == None: route = gdata.JOBTYPE
+        if format_type is None:
+            format_type = gdata.format
+        if route is None:
+            route = gdata.JOBTYPE
 
-        if format == "Gaussian": input = "com"
-        elif format == "ORCA" or format == "QChem": input = "inp"
+        # Create new input file
+        self._write_input_file(
+            file_path, format_type, suffix, nproc, mem, route, charge, mult,
+            elements, cartesians, nat, func, basis
+        )
 
-        new_input = Logger(file.split(".")[0],input, suffix)
+        # Check for atomic overlaps
+        self.OVERLAPPED = check_overlap(self.ATOMTYPES, self.NEW_CARTESIAN)
 
-        if format == "Gaussian":
-            new_input.Writeonlyfile('%chk='+file.split(".")[0]+"_"+suffix+".chk")
-            new_input.Writeonlyfile('%nproc='+str(nproc)+'\n%mem='+mem+'\n#'+route+'\n\n'+file.split(".")[0]+'_'+suffix+'\n\n'+str(charge)+" "+str(mult))
-        elif format == "ORCA":
+        if verbose and log:
+            log.close()
 
-            ## split maxcore string for ORCA
-            memory_number = re.findall(r'\d+',mem)
-            unit = re.findall(r'GB',mem)
-            if len(unit) > 0:
-                mem = int(memory_number[0])*1024
+    def _write_header(
+        self,
+        log: Logger,
+        elements: list[str],
+        cartesians: np.ndarray,
+        nat: int,
+        freq: np.ndarray,
+        rmass: list[float],
+        fconst: list[float],
+        nmodes: int
+    ) -> None:
+        """Write header information to verbose log file."""
+        log.write(' pyQRC - a quick alternative to IRC calculations')
+        log.write(f' version: {__version__} / author: {__author__} / email: {__email__}')
+        log.write(' Based on: Goodman, J. M.; Silva, M. A. Tet. Lett. 2003, 44, 8233-8236; Tet. Lett. 2005, 46, 2067-2069.\n')
+        log.write('                -----ORIGINAL GEOMETRY------')
+        log.write(f'{"":>4} {"":>9} {"X":>9} {"Y":>9} {"Z":>9}')
 
+        for atom in range(nat):
+            log.write(f'{elements[atom]:>4} {"":>9} {cartesians[atom][0]:9.6f} {cartesians[atom][1]:9.6f} {cartesians[atom][2]:9.6f}')
+
+        log.write('\n                ----HARMONIC FREQUENCIES----')
+        log.write(f'{"Freq":>24} {"Red mass":>9} {"F const":>9}')
+
+        for mode in range(nmodes):
+            log.write(f'{freq[mode]:24.4f} {rmass[mode]:9.4f} {fconst[mode]:9.4f}')
+
+    def _calculate_shifts(
+        self,
+        freq: np.ndarray,
+        amplitude: float,
+        val: Optional[float],
+        num: Optional[int],
+        verbose: bool,
+        log: Optional[Logger],
+        elements: list[str],
+        disps: np.ndarray,
+        nat: int
+    ) -> list[float]:
+        """Calculate displacement shifts for each normal mode."""
+        shift = []
+
+        for mode, wn in enumerate(freq):
+            # Move along imaginary freqs, or a specific mode requested by user
+            should_shift = (
+                (wn < 0.0 and val is None and num is None) or
+                (wn == val) or
+                (mode + 1 == num)
+            )
+
+            if should_shift:
+                shift.append(amplitude)
+                if verbose and log:
+                    log.write('\n                -SHIFTING ALONG NORMAL MODE-')
+                    log.write(f'                -AMPLIFIER = {amplitude}')
+                    log.write(f'{"":>4} {"":>9} {"X":>9} {"Y":>9} {"Z":>9}')
+                    for atom in range(nat):
+                        log.write(
+                            f'{elements[atom]:>4} {"":>9} '
+                            f'{disps[mode][atom][0]:9.6f} '
+                            f'{disps[mode][atom][1]:9.6f} '
+                            f'{disps[mode][atom][2]:9.6f}'
+                        )
             else:
-                ## assuming memory is given in MB
-                mem = memory_number[0]
-            
-            new_input.Writeonlyfile('! '+route+'\n %pal nprocs '+str(nproc) + ' end\n %maxcore '+ str(mem)+ '\n\n# '+file.split(".")[0]+'_'+suffix+'\n\n* xyz '+str(charge)+" "+str(mult))
-        elif format == "QChem":
-            new_input.Writeonlyfile('$molecule\n'+str(charge)+" "+str(mult))
-        # Save the new Cartesian coordinates
-        for atom in range(0,nat):
-            new_input.Writeonlyfile('{0:>2} {1:12.8f} {2:12.8f} {3:12.8f}'.format(elements[atom], cartesians[atom][0], cartesians[atom][1], cartesians[atom][2]))
-        if format == "Gaussian": new_input.Writeonlyfile("")
-        elif format == "ORCA": new_input.Writeonlyfile("*")
-        elif format == "QChem":
-            new_input.Writeonlyfile("$end\n\n$rem")
-            new_input.Writeonlyfile("   JOBTYPE opt\n   METHOD "+func+"\n   BASIS "+basis)
-            new_input.Writeonlyfile("$end\n\n@@@\n\n$molecule\n   read\n$end\n\n$rem")
-            new_input.Writeonlyfile("   JOBTYPE freq\n   METHOD "+func+"\n   BASIS "+basis)
-            new_input.Writeonlyfile("$end\n")
+                shift.append(0.0)
+
+        return shift
+
+    def _write_input_file(
+        self,
+        file_path: Path,
+        format_type: str,
+        suffix: str,
+        nproc: int,
+        mem: str,
+        route: str,
+        charge: int,
+        mult: int,
+        elements: list[str],
+        cartesians: np.ndarray,
+        nat: int,
+        func: Optional[str],
+        basis: Optional[str]
+    ) -> None:
+        """Write new computational chemistry input file."""
+        if format_type == "Gaussian":
+            input_ext = "com"
+        elif format_type in ("ORCA", "QChem"):
+            input_ext = "inp"
+        else:
+            input_ext = "com"
+
+        new_input = Logger(file_path.stem, input_ext, suffix)
+
+        if format_type == "Gaussian":
+            new_input.write(f'%chk={file_path.stem}_{suffix}.chk')
+            new_input.write(f'%nproc={nproc}\n%mem={mem}\n#{route}\n\n{file_path.stem}_{suffix}\n\n{charge} {mult}')
+
+        elif format_type == "ORCA":
+            # Parse memory string for ORCA
+            memory_number = re.findall(r'\d+', mem)
+            unit = re.findall(r'GB', mem)
+            if unit:
+                mem_val = int(memory_number[0]) * 1024
+            else:
+                mem_val = memory_number[0]
+
+            new_input.write(
+                f'! {route}\n %pal nprocs {nproc} end\n %maxcore {mem_val}\n\n'
+                f'# {file_path.stem}_{suffix}\n\n* xyz {charge} {mult}'
+            )
+
+        elif format_type == "QChem":
+            new_input.write(f'$molecule\n{charge} {mult}')
+
+        # Write coordinates
+        for atom in range(nat):
+            new_input.write(
+                f'{elements[atom]:>2} {cartesians[atom][0]:12.8f} '
+                f'{cartesians[atom][1]:12.8f} {cartesians[atom][2]:12.8f}'
+            )
+
+        # Write format-specific footer
+        if format_type == "Gaussian":
+            new_input.write("")
+        elif format_type == "ORCA":
+            new_input.write("*")
+        elif format_type == "QChem":
+            new_input.write("$end\n\n$rem")
+            new_input.write(f"   JOBTYPE opt\n   METHOD {func}\n   BASIS {basis}")
+            new_input.write("$end\n\n@@@\n\n$molecule\n   read\n$end\n\n$rem")
+            new_input.write(f"   JOBTYPE freq\n   METHOD {func}\n   BASIS {basis}")
+            new_input.write("$end\n")
+
+        new_input.close()
 
 
+def g16_opt(comfile: str) -> None:
+    """Run Gaussian 16 optimization using shell script.
 
-        def gen_overlap(mol_atoms, coords, covfrac):
-            ## Use VDW radii to infer a connectivity matrix
-            over_mat = np.zeros((len(mol_atoms), len(mol_atoms)))
-            for i, atom_no_i in enumerate(mol_atoms):
-                for j, atom_no_j in enumerate(mol_atoms):
-                    if j > i:
-                        rcov_ij = rcov[atom_no_i] + rcov[atom_no_j]
-                        dist_ij = np.linalg.norm(np.array(coords[i])-np.array(coords[j]))
-                        if dist_ij / rcov_ij < covfrac:
-                            #print((i+1), (j+1), dist_ij, vdw_ij, rcov_ij)
-                            over_mat[i][j] = 1
-                        else: pass
-            return over_mat
-
-        def check_overlap(self, covfrac=0.8):
-            overlapped = None
-            over_mat = gen_overlap(self.ATOMTYPES, self.NEW_CARTESIAN, covfrac)
-            overlapped = np.any(over_mat)
-            return overlapped
-
-        self.OVERLAPPED = check_overlap(self)
-
-        #except:
-        #    print('o   Unable to parse information from {} with cclib ...'.format(file))
+    Args:
+        comfile: Path to Gaussian input file.
+    """
+    script_dir = Path(__file__).parent.absolute()
+    command = [str(script_dir / 'run_g16.sh'), str(comfile)]
+    subprocess.run(command)
 
 
-def g16_opt( comfile):
-    ''' run g16 using shell script and args '''
-    # check whether job has already been run
-    logfile = os.path.splitext(comfile)[0] + '.log'
-    command = [os.path.abspath(os.path.dirname(__file__))+'/run_g16.sh', str(comfile)]
-    g16_result = subprocess.run(command)
+def run_irc(
+    file: str,
+    options,
+    num: int,
+    amp: float,
+    lot_bs: str,
+    suffix: str,
+    log_output: Logger
+) -> None:
+    """Run IRC-like displacement calculation.
 
+    Args:
+        file: Input file path.
+        options: Command-line options namespace.
+        num: Mode number to displace along.
+        amp: Displacement amplitude.
+        lot_bs: Level of theory and basis set.
+        suffix: Output file suffix.
+        log_output: Logger for output messages.
+    """
+    file_path = Path(file)
+    qrc = QRCGenerator(
+        file, amp, options.nproc, options.mem, lot_bs,
+        options.verbose, suffix, None, num
+    )
 
-def run_irc(file,options,num,amp,lot_bs,suffix,charge,mult,log_output):
-    #checking amplitutes energy for a given node and creating the single point file
-    qrc = gen_qrc(file, amp, options.nproc, options.mem, lot_bs, options.verbose, suffix, None, num)
-    #do check of GEOMETRY if its valid and no atoms overlappins
     if not qrc.OVERLAPPED:
-        g16_opt(file.split('.')[0]+'_'+suffix+'.com')
+        g16_opt(f'{file_path.stem}_{suffix}.com')
     else:
-        log_output.Writeonlyfile('x  Skipping {} due to overlap in atoms'.format(file.split('.')[0]+'_'+suffix+'.com'))
+        log_output.write(f'x  Skipping {file_path.stem}_{suffix}.com due to overlap in atoms')
+
 
 def main():
-    # get command line inputs. Use -h to list all possible arguments and default values
-    parser = OptionParser(usage="Usage: %prog [options] <input1>.log <input2>.log ...")
-    parser.add_option("--amp", dest="amplitude", action="store", help="amplitude (default 0.2)", default="0.2", type="float", metavar="AMPLITUDE")
-    parser.add_option("--nproc", dest="nproc", action="store", help="number of processors (default 1)", default="1", type="int", metavar="NPROC")
-    parser.add_option("--mem", dest="mem", action="store", help="memory (default 4GB)", default="4GB", type="string", metavar="MEM")
-    parser.add_option("--route", dest="route", action="store", help="calculation route (defaults to same as original file)", default=None, type="string", metavar="ROUTE")
-    parser.add_option("-v", dest="verbose", action="store_true", help="verbose output", default=True, metavar="VERBOSE")
-    parser.add_option("--auto", dest="auto", action="store_true", help="turn on automatic batch processing", default=False, metavar="AUTO")
-    parser.add_option("--name", dest="suffix", action="store", help="append to file name (defaults to QRC)", default="QRC", type="string", metavar="SUFFIX")
-    parser.add_option("-f", "--freq", dest="freq", action="store", help="request motion along a particular frequency (cm-1)", default=None, type="float", metavar="FREQ")
-    parser.add_option("--freqnum", dest="freqnum", action="store", help="request motion along a particular frequency (number)", default=None, type="int", metavar="FREQNUM")
+    """Main entry point for pyQRC command-line interface."""
+    parser = ArgumentParser(
+        description="pyQRC - a quick alternative to IRC calculations",
+        usage="%(prog)s [options] <input1>.log <input2>.log ..."
+    )
 
-    #arguments for running calcs
-    parser.add_option("--qcoord", dest="qcoord", action="store_true", help="request automatic single point calculation along a particular normal mode (number)", default=False, metavar="QCOORD")
-    parser.add_option("--nummodes", dest="nummodes", action="store", help="number of modes for automatic single point calculation", default='all', type='string',metavar="NUMMODES")
+    parser.add_argument(
+        "files", nargs="*", metavar="FILE",
+        help="Output files to process (.out or .log)"
+    )
+    parser.add_argument(
+        "--amp", dest="amplitude", type=float, default=DEFAULT_AMPLITUDE,
+        metavar="AMPLITUDE", help=f"amplitude (default {DEFAULT_AMPLITUDE})"
+    )
+    parser.add_argument(
+        "--nproc", dest="nproc", type=int, default=DEFAULT_NPROC,
+        metavar="NPROC", help=f"number of processors (default {DEFAULT_NPROC})"
+    )
+    parser.add_argument(
+        "--mem", dest="mem", type=str, default=DEFAULT_MEMORY,
+        metavar="MEM", help=f"memory (default {DEFAULT_MEMORY})"
+    )
+    parser.add_argument(
+        "--route", dest="route", type=str, default=None,
+        metavar="ROUTE", help="calculation route (defaults to same as original file)"
+    )
+    parser.add_argument(
+        "-v", dest="verbose", action="store_true", default=True,
+        help="verbose output"
+    )
+    parser.add_argument(
+        "--auto", dest="auto", action="store_true", default=False,
+        help="turn on automatic batch processing"
+    )
+    parser.add_argument(
+        "--name", dest="suffix", type=str, default=DEFAULT_SUFFIX,
+        metavar="SUFFIX", help=f"append to file name (defaults to {DEFAULT_SUFFIX})"
+    )
+    parser.add_argument(
+        "-f", "--freq", dest="freq", type=float, default=None,
+        metavar="FREQ", help="request motion along a particular frequency (cm-1)"
+    )
+    parser.add_argument(
+        "--freqnum", dest="freqnum", type=int, default=None,
+        metavar="FREQNUM", help="request motion along a particular frequency (number)"
+    )
+    parser.add_argument(
+        "--qcoord", dest="qcoord", action="store_true", default=False,
+        help="request automatic single point calculation along a particular normal mode"
+    )
+    parser.add_argument(
+        "--nummodes", dest="nummodes", type=str, default='all',
+        metavar="NUMMODES", help="number of modes for automatic single point calculation"
+    )
 
-    (options, args) = parser.parse_args()
+    args = parser.parse_args()
 
+    # Collect input files
     files = []
-    if len(sys.argv) > 1:
-      for elem in sys.argv[1:]:
-         try:
+    for elem in sys.argv[1:]:
+        try:
             if os.path.splitext(elem)[1] in [".out", ".log"]:
-               for file in glob(elem): files.append(file)
-         except IndexError: pass
-
+                for file in glob(elem):
+                    files.append(file)
+        except IndexError:
+            pass
 
     for file in files:
-        # parse compchem output with cclib & count imaginary frequencies
-        parser = cclib.io.ccopen(file)
-        data = parser.parse()
-
-        #for i in range(1,len(data.atomcoords)):
-        #    mw_distance = mwdist(data.atomcoords[i], data.atomcoords[1], data.atomnos)
-        #    print(mw_distance)
+        # Parse output with cclib and count imaginary frequencies
+        parser_cc = cclib.io.ccopen(file)
+        data = parser_cc.parse()
 
         if hasattr(data, 'vibfreqs'):
             im_freq = len([val for val in data.vibfreqs if val < 0])
-        else: print('o   {} has no frequency information: exiting'.format(file)); sys.exit()
-
-        if not options.qcoord:
-            if im_freq == 0 and options.auto != False:
-               print('x   {} has no imaginary frequencies: skipping'.format(file))
-            else:
-                if options.freq == None and options.freqnum == None:
-                    print('o   {} has {} imaginary frequencies: processing'.format(file, im_freq))
-                elif options.freq != None:
-                    print('o   {} will be distorted along the frequency of {} cm-1: processing'.format(file, options.freq))
-                elif options.freqnum != None:
-                    print('o   {} will be distorted along the frequency number {}: processing'.format(file, options.freqnum))
-                qrc = gen_qrc(file, options.amplitude, options.nproc, options.mem, options.route, options.verbose, options.suffix, options.freq, options.freqnum)
-
-        #doing automatic calcualtions (single points for stability check)
         else:
-            log_output = Logger("RUNIRC",'dat',options.nummodes)
-            if im_freq == 0:
-               log_output.Writeonlyfile('o   {} has no imaginary frequencies: check for stability'.format(file))
-            amp_base =  [round(elem, 2) for elem in np.arange(0,1,0.1) ]
-            # amp_base_backward =  [round(elem, 2) for elem in np.arange(-1,0,0.1) ]
-            energy_base = []
-            root_dir = os.getcwd()
-            parent_dir = os.getcwd()+'/'+file.split('.')[0]
-            if not os.path.exists(parent_dir):
-                os.makedirs(parent_dir)
-            log_output.Writeonlyfile('o  Entering directory {}'.format(parent_dir))
+            print(f'o   {file} has no frequency information: exiting')
+            sys.exit()
 
-            # getting energetics of the current molecule
-            energy_base.append(data.freeenergy)
-            #creating folders for number of normal modes
-            if options.nummodes=='all':
-                freq_range = range(1,len(data.vibfreqs)+1)
+        if not args.qcoord:
+            if im_freq == 0 and args.auto:
+                print(f'x   {file} has no imaginary frequencies: skipping')
             else:
-                freq_range = range(1,len(data.vibfreqs)+1)
-                freq_range = freq_range[:int(options.nummodes)]
+                if args.freq is None and args.freqnum is None:
+                    print(f'o   {file} has {im_freq} imaginary frequencies: processing')
+                elif args.freq is not None:
+                    print(f'o   {file} will be distorted along the frequency of {args.freq} cm-1: processing')
+                elif args.freqnum is not None:
+                    print(f'o   {file} will be distorted along the frequency number {args.freqnum}: processing')
+
+                QRCGenerator(
+                    file, args.amplitude, args.nproc, args.mem, args.route,
+                    args.verbose, args.suffix, args.freq, args.freqnum
+                )
+
+        else:
+            # Automatic calculations (single points for stability check)
+            log_output = Logger("RUNIRC", 'dat', args.nummodes)
+
+            if im_freq == 0:
+                log_output.write(f'o   {file} has no imaginary frequencies: check for stability')
+
+            amp_base = [round(elem, 2) for elem in np.arange(0, 1, 0.1)]
+            root_dir = os.getcwd()
+            file_path = Path(file)
+            parent_dir = Path(root_dir) / file_path.stem
+
+            if not parent_dir.exists():
+                parent_dir.mkdir(parents=True)
+
+            log_output.write(f'o  Entering directory {parent_dir}')
+
+            # Determine frequency range
+            if args.nummodes == 'all':
+                freq_range = range(1, len(data.vibfreqs) + 1)
+            else:
+                freq_range = range(1, min(int(args.nummodes) + 1, len(data.vibfreqs) + 1))
+
             for num in freq_range:
-                num_dir = parent_dir +'/'+ 'num_'+str(num)
-                if not os.path.exists(num_dir):
-                    os.makedirs(num_dir)
-                log_output.Writeonlyfile('o  Entering directory {}'.format(num_dir))
-                shutil.copyfile(root_dir+'/'+file, num_dir+'/'+file)
+                num_dir = parent_dir / f'num_{num}'
+                if not num_dir.exists():
+                    num_dir.mkdir()
+
+                log_output.write(f'o  Entering directory {num_dir}')
+                shutil.copyfile(file, num_dir / file_path.name)
                 os.chdir(num_dir)
+
                 for amp in amp_base:
-                    suffix = 'num_'+str(num)+'_amp_'+str(amp).split('.')[0]+str(amp).split('.')[1]
-                    run_irc(file,options,num,amp,freq.LEVELOFTHEORY,suffix,freq.CHARGE,freq.MULT,log_output)
-                    log_output.Writeonlyfile('o  Writing to file {}'.format(file.split('.')[0]+'_'+suffix))
+                    suffix = f'num_{num}_amp_{str(amp).replace(".", "")}'
+                    gdata = OutputData(file)
+                    run_irc(
+                        file_path.name, args, num, amp, gdata.LEVELOFTHEORY,
+                        suffix, log_output
+                    )
+                    log_output.write(f'o  Writing to file {file_path.stem}_{suffix}')
+
                 os.chdir(parent_dir)
+
+            log_output.close()
+
 
 if __name__ == "__main__":
     main()
