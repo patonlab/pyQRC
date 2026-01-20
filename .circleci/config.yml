@@ -21,7 +21,7 @@ jobs:
           name: Run tests with coverage
           command: pytest --cov=pyqrc --cov-report=xml -v
       - codecov/upload:
-          file: coverage.xml
+          files: coverage.xml
 
 workflows:
   test:
