@@ -108,7 +108,8 @@ class Logger:
             append: String to append to filename before extension.
         """
         self.filepath = f"{filein}_{append}.{suffix}"
-        self.log = open(self.filepath, 'w')
+        # pylint: disable=consider-using-with
+        self.log = open(self.filepath, 'w', encoding='utf-8')
 
     def __enter__(self):
         return self
@@ -156,7 +157,7 @@ class OutputData:
         self.LEVELOFTHEORY: Optional[str] = None
         self.TERMINATION: Optional[str] = None
 
-        with open(file, 'r') as f:
+        with open(file, 'r', encoding='utf-8') as f:
             outlines = f.readlines()
 
         self._get_format(outlines)
@@ -187,7 +188,7 @@ class OutputData:
             String in format "level/basis_set".
         """
         repeated_theory = 0
-        with open(self.file) as f:
+        with open(self.file, encoding='utf-8') as f:
             data = f.readlines()
         level, bs = 'none', 'none'
 
@@ -593,7 +594,7 @@ def g16_opt(comfile: str) -> None:
     """
     script_dir = Path(__file__).parent.absolute()
     command = [str(script_dir / 'run_g16.sh'), str(comfile)]
-    subprocess.run(command)
+    subprocess.run(command, check=False)
 
 
 def run_irc(

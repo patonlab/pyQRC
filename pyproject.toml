@@ -73,6 +73,14 @@ py-version = "3.9"
 disable = [
     "missing-module-docstring",
     "missing-function-docstring",
+    "invalid-name",
+    "too-many-arguments",
+    "too-many-positional-arguments",
+    "too-many-locals",
+    "too-many-branches",
+    "too-many-statements",
+    "too-many-nested-blocks",
+    "too-few-public-methods",
 ]
 
 [tool.pylint.format]
