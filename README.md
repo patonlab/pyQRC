@@ -116,8 +116,6 @@ In this example, the initial optimization located a (3rd order) saddle point - p
 
 If you use pyQRC in your research, please cite:
 
-[![DOI](https://zenodo.org/badge/138228684.svg)](https://zenodo.org/badge/latestdoi/138228684)
-
 Paton, R. S. *pyQRC*. **2018**, https://doi.org/10.5281/zenodo.1407814
 
 ## References
