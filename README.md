@@ -1,6 +1,6 @@
 ![pyQRC](https://raw.githubusercontent.com/patonlab/pyQRC/master/pyQRC_banner.png)
 
-[![DOI](https://zenodo.org/badge/138228684.svg)](https://zenodo.org/badge/latestdoi/138228684)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18308862.svg)](https://doi.org/10.5281/zenodo.18308862)
 [![PyPI version](https://badge.fury.io/py/pyqrc.svg)](https://badge.fury.io/py/pyqrc)
 [![Python versions](https://img.shields.io/pypi/pyversions/pyqrc)](https://pypi.org/project/pyqrc/)
 [![Downloads](https://img.shields.io/pypi/dm/pyqrc)](https://pypi.org/project/pyqrc/)
@@ -121,7 +121,7 @@ In this example, the initial optimization located a (3rd order) saddle point - p
 
 If you use pyQRC in your research, please cite:
 
-Paton, R. S. *pyQRC*. **2018**, https://doi.org/10.5281/zenodo.1407814
+Paton, R. S.; Sowndarya S. V., S.; Landis, J.; Goodfellow, A. S. *pyQRC*. [**DOI:** 10.5281/zenodo.3365476](https://doi.org/10.5281/zenodo.3365476)
 
 ## References
 
