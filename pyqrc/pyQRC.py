@@ -10,7 +10,7 @@ Based on: Goodman, J. M.; Silva, M. A. Tet. Lett. 2003, 44, 8233-8236;
           Tet. Lett. 2005, 46, 2067-2069.
 """
 
-__version__ = '2.1'
+__version__ = '2.1.0'
 __author__ = 'Robert Paton'
 __email__ = 'robert.paton@colostate.edu'
 
@@ -500,6 +500,7 @@ class QRCGenerator:
                 shift.append(amplitude)
                 if verbose and log:
                     log.write('\n                -SHIFTING ALONG NORMAL MODE-')
+                    log.write(f'                -MODE {mode + 1}: {wn:.1f} cm-1')
                     log.write(f'                -AMPLIFIER = {amplitude}')
                     log.write(f'{"":>4} {"":>9} {"X":>9} {"Y":>9} {"Z":>9}')
                     for atom in range(nat):
