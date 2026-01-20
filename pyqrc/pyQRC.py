@@ -10,7 +10,7 @@ Based on: Goodman, J. M.; Silva, M. A. Tet. Lett. 2003, 44, 8233-8236;
           Tet. Lett. 2005, 46, 2067-2069.
 """
 
-__version__ = '2.0.1'
+__version__ = '2.1.0'
 __author__ = 'Robert Paton'
 __email__ = 'robert.paton@colostate.edu'
 
