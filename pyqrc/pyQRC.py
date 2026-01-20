@@ -197,25 +197,25 @@ class OutputData:
                 break
             if '\\Freq\\' in line.strip() and repeated_theory == 0:
                 try:
-                    level, bs = (line.strip().split("\\")[4:6])
+                    level, bs = line.strip().split("\\")[4:6]
                     repeated_theory = 1
                 except IndexError:
                     pass
             elif '|Freq|' in line.strip() and repeated_theory == 0:
                 try:
-                    level, bs = (line.strip().split("|")[4:6])
+                    level, bs = line.strip().split("|")[4:6]
                     repeated_theory = 1
                 except IndexError:
                     pass
             if '\\SP\\' in line.strip() and repeated_theory == 0:
                 try:
-                    level, bs = (line.strip().split("\\")[4:6])
+                    level, bs = line.strip().split("\\")[4:6]
                     repeated_theory = 1
                 except IndexError:
                     pass
             elif '|SP|' in line.strip() and repeated_theory == 0:
                 try:
-                    level, bs = (line.strip().split("|")[4:6])
+                    level, bs = line.strip().split("|")[4:6]
                     repeated_theory = 1
                 except IndexError:
                     pass
@@ -458,12 +458,14 @@ class QRCGenerator:
         """Write header information to verbose log file."""
         log.write(' pyQRC - a quick alternative to IRC calculations')
         log.write(f' version: {__version__} / author: {__author__} / email: {__email__}')
-        log.write(' Based on: Goodman, J. M.; Silva, M. A. Tet. Lett. 2003, 44, 8233-8236; Tet. Lett. 2005, 46, 2067-2069.\n')
+        log.write(' Based on: Goodman, J. M.; Silva, M. A. Tet. Lett. 2003, 44, 8233-8236;')
+        log.write(' Tet. Lett. 2005, 46, 2067-2069.\n')
         log.write('                -----ORIGINAL GEOMETRY------')
         log.write(f'{"":>4} {"":>9} {"X":>9} {"Y":>9} {"Z":>9}')
 
         for atom in range(nat):
-            log.write(f'{elements[atom]:>4} {"":>9} {cartesians[atom][0]:9.6f} {cartesians[atom][1]:9.6f} {cartesians[atom][2]:9.6f}')
+            x, y, z = cartesians[atom]
+            log.write(f'{elements[atom]:>4} {"":>9} {x:9.6f} {y:9.6f} {z:9.6f}')
 
         log.write('\n                ----HARMONIC FREQUENCIES----')
         log.write(f'{"Freq":>24} {"Red mass":>9} {"F const":>9}')
@@ -540,7 +542,8 @@ class QRCGenerator:
 
         if format_type == "Gaussian":
             new_input.write(f'%chk={file_path.stem}_{suffix}.chk')
-            new_input.write(f'%nproc={nproc}\n%mem={mem}\n#{route}\n\n{file_path.stem}_{suffix}\n\n{charge} {mult}')
+            new_input.write(f'%nproc={nproc}\n%mem={mem}\n#{route}\n')
+            new_input.write(f'\n{file_path.stem}_{suffix}\n\n{charge} {mult}')
 
         elif format_type == "ORCA":
             # Parse memory string for ORCA
@@ -710,9 +713,9 @@ def main():
                 if args.freq is None and args.freqnum is None:
                     print(f'o   {file} has {im_freq} imaginary frequencies: processing')
                 elif args.freq is not None:
-                    print(f'o   {file} will be distorted along the frequency of {args.freq} cm-1: processing')
+                    print(f'o   {file} will be distorted along {args.freq} cm-1: processing')
                 elif args.freqnum is not None:
-                    print(f'o   {file} will be distorted along the frequency number {args.freqnum}: processing')
+                    print(f'o   {file} will be distorted along freq #{args.freqnum}: processing')
 
                 QRCGenerator(
                     file, args.amplitude, args.nproc, args.mem, args.route,

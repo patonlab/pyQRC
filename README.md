@@ -2,6 +2,9 @@
 
 [![DOI](https://zenodo.org/badge/138228684.svg)](https://zenodo.org/badge/latestdoi/138228684)
 [![PyPI version](https://badge.fury.io/py/pyqrc.svg)](https://badge.fury.io/py/pyqrc)
+[![Python versions](https://img.shields.io/pypi/pyversions/pyqrc)](https://pypi.org/project/pyqrc/)
+[![Downloads](https://img.shields.io/pypi/dm/pyqrc)](https://pypi.org/project/pyqrc/)
+[![License](https://img.shields.io/pypi/l/pyqrc)](https://opensource.org/licenses/MIT)
 
 ## Introduction
 
@@ -106,6 +109,14 @@ python -m pyqrc planar_chex.log --nproc 4 --freqnum 3 --name mode3
 ```
 
 In this example, the initial optimization located a (3rd order) saddle point - planar cyclohexane - with three imaginary frequencies. Two new inputs are created by displacing along (i) only the first (i.e., lowest) normal mode and (ii) only the third normal mode. This contrasts from the `--auto` function of pyQRC which displaces along all imaginary modes. Subsequent optimizations of these new inputs results in different minima, producing (i) chair-shaped cyclohexane and (ii) twist-boat cyclohexane. This example illustrates that displacement along particular normal modes could be used for e.g. conformational sampling.
+
+## Citation
+
+If you use pyQRC in your research, please cite:
+
+[![DOI](https://zenodo.org/badge/138228684.svg)](https://zenodo.org/badge/latestdoi/138228684)
+
+Paton, R. S. *pyQRC*. **2018**, https://doi.org/10.5281/zenodo.1407814
 
 ## References
 
