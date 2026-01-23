@@ -41,6 +41,11 @@ pip install pyqrc
 uv pip install pyqrc
 ```
 
+**Via pixi:**
+```bash
+pixi add --pypi pyqrc
+```
+
 **From source:**
 Clone the repository https://github.com/patonlab/pyQRC.git and add to your PYTHONPATH variable.
 
