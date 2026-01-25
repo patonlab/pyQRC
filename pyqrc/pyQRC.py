@@ -544,7 +544,7 @@ class QRCGenerator:
 
         if format_type == "Gaussian":
             new_input.write(f'%chk={file_path.stem}_{suffix}.chk')
-            new_input.write(f'%nproc={nproc}\n%mem={mem}\n#{route}\n')
+            new_input.write(f'%nproc={nproc}\n%mem={mem}\n#{route}')
             new_input.write(f'\n{file_path.stem}_{suffix}\n\n{charge} {mult}')
 
         elif format_type == "ORCA":
@@ -705,8 +705,8 @@ def main():
         if hasattr(data, 'vibfreqs'):
             im_freq = len([val for val in data.vibfreqs if val < 0])
         else:
-            print(f'o   {file} has no frequency information: exiting')
-            sys.exit()
+            print(f'x   {file} has no frequency information: skipping')
+            continue
 
         if not args.qcoord:
             if im_freq == 0 and args.auto:
