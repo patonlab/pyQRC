@@ -122,6 +122,18 @@ python -m pyqrc planar_chex.log --nproc 4 --freqnum 3 --name mode3
 
 In this example, the initial optimization located a (3rd order) saddle point - planar cyclohexane - with three imaginary frequencies. Two new inputs are created by displacing along (i) only the first (i.e., lowest) normal mode and (ii) only the third normal mode. This contrasts from the `--auto` function of pyQRC which displaces along all imaginary modes. Subsequent optimizations of these new inputs results in different minima, producing (i) chair-shaped cyclohexane and (ii) twist-boat cyclohexane. This example illustrates that displacement along particular normal modes could be used for e.g. conformational sampling.
 
+## Comparison with IRC
+
+To benchmark QRC against intrinsic reaction coordinate (IRC) calculations, 544 transition states from the [Grambow dataset](https://www.nature.com/articles/s41597-020-0460-4) were used. Transition states were reoptimized at the wB97XD/6-31G(d) level, and QRC calculations were performed with three displacement amplitudes (0.1, 0.3, and 0.5). The resulting reactant and product identities (canonical SMILES) and energies were compared against IRC results for the same structures.
+
+| Amplitude | Barrier MAE (kcal/mol) | Rxn Energy MAE (kcal/mol) | Reactant Match | Product Match |
+|-----------|------------------------|---------------------------|----------------|---------------|
+| 0.1       | 4.55                   | 5.73                      | 97.8%          | 98.2%         |
+| 0.3       | 0.65                   | 1.39                      | 98.9%          | 98.9%         |
+| 0.5       | 0.58                   | 3.44                      | 98.7%          | 98.2%         |
+
+An amplitude of **0.3** gives the best overall performance, with the highest SMILES match rates for both reactants and products (98.9%) and low MAE for barriers (0.65 kcal/mol) and reaction energies (1.39 kcal/mol). While an amplitude of 0.5 gives a marginally lower barrier MAE (0.58 kcal/mol), it produces larger errors in reaction energies and lower product match rates. An amplitude of 0.1 gives insufficient displacement, leading to higher energy errors and more mismatched products. Full details and data are available in the [irc_comparison](irc_comparison/analysis/) directory.
+
 ## Citation
 
 If you use pyQRC in your research, please cite:
