@@ -307,9 +307,15 @@ def main():
         n_with_freq = sum(1 for ts_id in common_all if ts_id in imag_freqs)
         print(f"Imaginary frequencies: {len(imag_freqs)} read from {freq_file}, {n_with_freq} in common set")
     elif ts_dir:
-        imag_freqs = parse_imag_freqs(ts_dir)
-        n_with_freq = sum(1 for ts_id in common_all if ts_id in imag_freqs)
-        print(f"Imaginary frequencies: {len(imag_freqs)} parsed from {ts_dir}, {n_with_freq} in common set")
+        cached_file = os.path.join(ts_dir, "imag_freqs.txt")
+        if os.path.isfile(cached_file):
+            imag_freqs = parse_freq_file(cached_file)
+            n_with_freq = sum(1 for ts_id in common_all if ts_id in imag_freqs)
+            print(f"Imaginary frequencies: {len(imag_freqs)} read from {cached_file}, {n_with_freq} in common set")
+        else:
+            imag_freqs = parse_imag_freqs(ts_dir)
+            n_with_freq = sum(1 for ts_id in common_all if ts_id in imag_freqs)
+            print(f"Imaginary frequencies: {len(imag_freqs)} parsed from {ts_dir}, {n_with_freq} in common set")
 
     # Compute structural change metrics from IRC SMILES
     struct_changes = {}
