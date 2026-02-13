@@ -1,0 +1,369 @@
+====================================================================================================
+QRC01 vs IRC: 22 SMILES mismatches
+====================================================================================================
+
+ts_039  (match: partial)
+  Reactant  XX:  IRC: C=CCC(C)=O
+                 QRC01: C[C@]12C[C@H]1CO2
+  Product   OK:  IRC: C[C@@H]1C=CCO1
+                 QRC01: C[C@@H]1C=CCO1
+  Barrier error: -27.22 kcal/mol    Rxn energy error: -27.24 kcal/mol
+
+ts_056  (match: partial)
+  Reactant  OK:  IRC: ON=C1COC1
+                 QRC01: ON=C1COC1
+  Product   XX:  IRC: O/N=C\[C@@H]1CO1
+                 QRC01: ON1[C@H]2CO[C@H]21
+  Barrier error: -0.00 kcal/mol    Rxn energy error: +22.99 kcal/mol
+
+ts_111  (match: partial)
+  Reactant  OK:  IRC: N#C[C@H]1CCO1
+                 QRC01: N#C[C@H]1CCO1
+  Product   XX:  IRC: N#C[C@H]1C[C]O1.[H][H]
+                 QRC01: [CH2][C]1O[C@H]1C#N.[H].[H]
+  Barrier error: +0.03 kcal/mol    Rxn energy error: +246.66 kcal/mol
+
+ts_182  (match: partial)
+  Reactant  OK:  IRC: [CH]COCC=N
+                 QRC01: [CH]COCC=N
+  Product   XX:  IRC: C=COC[CH][NH]
+                 QRC01: C=COCC=N
+  Barrier error: +0.15 kcal/mol    Rxn energy error: -1.80 kcal/mol
+
+ts_199  (match: partial)
+  Reactant  OK:  IRC: CC(=O)[C@@H](C)O
+                 QRC01: CC(=O)[C@@H](C)O
+  Product   XX:  IRC: C=CO.CC=O
+                 QRC01: C[C@@H](O)CC=O
+  Barrier error: +0.02 kcal/mol    Rxn energy error: -21.02 kcal/mol
+
+ts_202  (match: partial)
+  Reactant  XX:  IRC: C=C=O.C=CO.[H][H]
+                 QRC01: C=CO.[CH2].[C]=O.[H][H]
+  Product   OK:  IRC: CC(=O)[C@@H](C)O
+                 QRC01: CC(=O)[C@@H](C)O
+  Barrier error: -103.95 kcal/mol    Rxn energy error: -103.98 kcal/mol
+
+ts_214  (match: partial)
+  Reactant  XX:  IRC: CC1=CC[C@@H]1C
+                 QRC01: C[C@H]1[C@@H]2C[C@]12C
+  Product   OK:  IRC: C[C@@]12CC[C@@H]1C2
+                 QRC01: C[C@@]12CC[C@@H]1C2
+  Barrier error: -16.41 kcal/mol    Rxn energy error: -16.41 kcal/mol
+
+ts_311  (match: partial)
+  Reactant  XX:  IRC: CCC=O.[C]=O.[H][H]
+                 QRC01: CCC=O.[C].[H][H].[O]
+  Product   OK:  IRC: CCCOC=O
+                 QRC01: CCCOC=O
+  Barrier error: -369.34 kcal/mol    Rxn energy error: -369.36 kcal/mol
+
+ts_340  (match: partial)
+  Reactant  XX:  IRC: C=N.O=CC=O
+                 QRC01: [CH]OCNC=O
+  Product   OK:  IRC: O=CCNC=O
+                 QRC01: O=CCNC=O
+  Barrier error: -24.42 kcal/mol    Rxn energy error: -22.94 kcal/mol
+
+ts_399  (match: partial)
+  Reactant  OK:  IRC: C#CC#CC=O
+                 QRC01: C#CC#CC=O
+  Product   XX:  IRC: [CH2]C#C[C]=C=O
+                 QRC01: [CH2]C#CC#C[O]
+  Barrier error: +2.43 kcal/mol    Rxn energy error: +1.83 kcal/mol
+
+ts_431  (match: partial)
+  Reactant  OK:  IRC: CC1=CN1[N][NH]
+                 QRC01: CC1=CN1[N][NH]
+  Product   XX:  IRC: [N]=[N]=N.CC#C
+                 QRC01: Cc1c[nH]nn1
+  Barrier error: +0.02 kcal/mol    Rxn energy error: -72.31 kcal/mol
+
+ts_449  (match: partial)
+  Reactant  OK:  IRC: O=C1[C][CH][CH]C1.[H][H]
+                 QRC01: O=C1[C][CH][CH]C1.[H][H]
+  Product   XX:  IRC: O=C1CC=CC1
+                 QRC01: O=C1C=CCC1
+  Barrier error: +0.01 kcal/mol    Rxn energy error: -4.63 kcal/mol
+
+ts_469  (match: partial)
+  Reactant  XX:  IRC: C1=CCC1.[C]=O.[H][H]
+                 QRC01: [CH][C]([CH2])[CH2].[C].[H].[H][H].[O]
+  Product   OK:  IRC: O=CC1CCC1
+                 QRC01: O=CC1CCC1
+  Barrier error: -640.09 kcal/mol    Rxn energy error: -639.95 kcal/mol
+
+ts_482  (match: partial)
+  Reactant  XX:  IRC: C[C](C=O)[N][N]
+                 QRC01: Cc1conn1
+  Product   OK:  IRC: C[C]([C]O)[N][N]
+                 QRC01: C[C]([C]O)[N][N]
+  Barrier error: +0.96 kcal/mol    Rxn energy error: +0.95 kcal/mol
+
+ts_486  (match: partial)
+  Reactant  XX:  IRC: C#CCOC=N
+                 QRC01: [C].[C].[H].[H].[H].[O][C]1[CH]N1
+  Product   OK:  IRC: [C]=CCOC=N
+                 QRC01: [C]=CCOC=N
+  Barrier error: -848.84 kcal/mol    Rxn energy error: -848.84 kcal/mol
+
+ts_493  (match: partial)
+  Reactant  XX:  IRC: [CH]C(C)C(C)C
+                 QRC01: C=C(C)C(C)C
+  Product   OK:  IRC: C[C@H]1CC[C@H]1C
+                 QRC01: C[C@H]1CC[C@H]1C
+  Barrier error: +83.56 kcal/mol    Rxn energy error: +83.56 kcal/mol
+
+ts_512  (match: partial)
+  Reactant  OK:  IRC: CC=O.[CH2][C][NH]
+                 QRC01: CC=O.[CH2][C][NH]
+  Product   XX:  IRC: C[C@@H](O)CC#N
+                 QRC01: CC=O.[CH2][C][NH]
+  Barrier error: +0.57 kcal/mol    Rxn energy error: +33.02 kcal/mol
+
+ts_528  (match: partial)
+  Reactant  XX:  IRC: C1=COC1.C=N
+                 QRC01: C1=COC1.[CH2][NH]
+  Product   OK:  IRC: C1NC12COC2
+                 QRC01: C1NC12COC2
+  Barrier error: +0.16 kcal/mol    Rxn energy error: +0.14 kcal/mol
+
+ts_536  (match: partial)
+  Reactant  OK:  IRC: C[C@@H]1[CH]C(=[N])N1
+                 QRC01: C[C@@H]1[CH]C(=[N])N1
+  Product   XX:  IRC: C[C@@H]1[CH][NH]1C#N
+                 QRC01: [CH]C(C)NC#N
+  Barrier error: +0.01 kcal/mol    Rxn energy error: -5.37 kcal/mol
+
+ts_584  (match: partial)
+  Reactant  XX:  IRC: [N]N[N]C(=[N])O
+                 QRC01: O[C]1=NN[N]N=1
+  Product   OK:  IRC: [N]N[N][C][N]O
+                 QRC01: [N]N[N][C][N]O
+  Barrier error: +138.45 kcal/mol    Rxn energy error: +138.41 kcal/mol
+
+ts_588  (match: partial)
+  Reactant  XX:  IRC: [CH]/C(C)=C1/CO1
+                 QRC01: CC1=C[C@@]12CO2
+  Product   OK:  IRC: C#C[C@]1(C)CO1
+                 QRC01: C#C[C@]1(C)CO1
+  Barrier error: +42.39 kcal/mol    Rxn energy error: +42.38 kcal/mol
+
+ts_593  (match: partial)
+  Reactant  OK:  IRC: C[C@H]1C[C@]1(C)O
+                 QRC01: C[C@H]1C[C@]1(C)O
+  Product   XX:  IRC: [CH]C(C)(O)CC
+                 QRC01: CC/C=C(\C)O
+  Barrier error: +0.01 kcal/mol    Rxn energy error: -79.11 kcal/mol
+
+====================================================================================================
+QRC03 vs IRC: 12 SMILES mismatches
+====================================================================================================
+
+ts_039  (match: partial)
+  Reactant  XX:  IRC: C=CCC(C)=O
+                 QRC03: C[C@]12C[C@H]1CO2
+  Product   OK:  IRC: C[C@@H]1C=CCO1
+                 QRC03: C[C@@H]1C=CCO1
+  Barrier error: -27.22 kcal/mol    Rxn energy error: -27.24 kcal/mol
+
+ts_056  (match: partial)
+  Reactant  OK:  IRC: ON=C1COC1
+                 QRC03: ON=C1COC1
+  Product   XX:  IRC: O/N=C\[C@@H]1CO1
+                 QRC03: ON1[C@H]2CO[C@H]21
+  Barrier error: -0.00 kcal/mol    Rxn energy error: +22.99 kcal/mol
+
+ts_095  (match: partial)
+  Reactant  XX:  IRC: C=C1[N][NH2]N=C1
+                 QRC03: [CH2]C1=N[NH2]N=C1
+  Product   OK:  IRC: Cc1cn[nH]n1
+                 QRC03: Cc1cn[nH]n1
+  Barrier error: +0.00 kcal/mol    Rxn energy error: -0.07 kcal/mol
+
+ts_182  (match: partial)
+  Reactant  OK:  IRC: [CH]COCC=N
+                 QRC03: [CH]COCC=N
+  Product   XX:  IRC: C=COC[CH][NH]
+                 QRC03: C=COCC=N
+  Barrier error: +0.15 kcal/mol    Rxn energy error: -1.80 kcal/mol
+
+ts_199  (match: partial)
+  Reactant  OK:  IRC: CC(=O)[C@@H](C)O
+                 QRC03: CC(=O)[C@@H](C)O
+  Product   XX:  IRC: C=CO.CC=O
+                 QRC03: C[C@@H](O)CC=O
+  Barrier error: +0.02 kcal/mol    Rxn energy error: -21.74 kcal/mol
+
+ts_214  (match: partial)
+  Reactant  XX:  IRC: CC1=CC[C@@H]1C
+                 QRC03: C[C@H]1[C@@H]2C[C@]12C
+  Product   OK:  IRC: C[C@@]12CC[C@@H]1C2
+                 QRC03: C[C@@]12CC[C@@H]1C2
+  Barrier error: -16.41 kcal/mol    Rxn energy error: -16.41 kcal/mol
+
+ts_248  (match: partial)
+  Reactant  OK:  IRC: C=O.[C]C#C[NH]
+                 QRC03: C=O.[C]C#C[NH]
+  Product   XX:  IRC: [C]=C(C#N)CO
+                 QRC03: N#CC#CCO
+  Barrier error: +0.41 kcal/mol    Rxn energy error: -49.48 kcal/mol
+
+ts_431  (match: partial)
+  Reactant  OK:  IRC: CC1=CN1[N][NH]
+                 QRC03: CC1=CN1[N][NH]
+  Product   XX:  IRC: [N]=[N]=N.CC#C
+                 QRC03: Cc1c[nH]nn1
+  Barrier error: +0.02 kcal/mol    Rxn energy error: -72.31 kcal/mol
+
+ts_482  (match: partial)
+  Reactant  XX:  IRC: C[C](C=O)[N][N]
+                 QRC03: Cc1conn1
+  Product   OK:  IRC: C[C]([C]O)[N][N]
+                 QRC03: C[C]([C]O)[N][N]
+  Barrier error: +0.96 kcal/mol    Rxn energy error: +0.95 kcal/mol
+
+ts_528  (match: partial)
+  Reactant  XX:  IRC: C1=COC1.C=N
+                 QRC03: C1=COC1.[CH2][NH]
+  Product   OK:  IRC: C1NC12COC2
+                 QRC03: C1NC12COC2
+  Barrier error: +0.16 kcal/mol    Rxn energy error: +0.14 kcal/mol
+
+ts_584  (match: partial)
+  Reactant  XX:  IRC: [N]N[N]C(=[N])O
+                 QRC03: O[C]1=NN[N]N=1
+  Product   OK:  IRC: [N]N[N][C][N]O
+                 QRC03: [N]N[N][C][N]O
+  Barrier error: +139.46 kcal/mol    Rxn energy error: +139.42 kcal/mol
+
+ts_593  (match: partial)
+  Reactant  OK:  IRC: C[C@H]1C[C@]1(C)O
+                 QRC03: C[C@H]1C[C@]1(C)O
+  Product   XX:  IRC: [CH]C(C)(O)CC
+                 QRC03: CC/C=C(\C)O
+  Barrier error: +0.01 kcal/mol    Rxn energy error: -79.11 kcal/mol
+
+====================================================================================================
+QRC05 vs IRC: 17 SMILES mismatches
+====================================================================================================
+
+ts_039  (match: partial)
+  Reactant  XX:  IRC: C=CCC(C)=O
+                 QRC05: C[C@]12C[C@H]1CO2
+  Product   OK:  IRC: C[C@@H]1C=CCO1
+                 QRC05: C[C@@H]1C=CCO1
+  Barrier error: -27.22 kcal/mol    Rxn energy error: -27.24 kcal/mol
+
+ts_056  (match: partial)
+  Reactant  OK:  IRC: ON=C1COC1
+                 QRC05: ON=C1COC1
+  Product   XX:  IRC: O/N=C\[C@@H]1CO1
+                 QRC05: ON1[C@H]2CO[C@H]21
+  Barrier error: -0.00 kcal/mol    Rxn energy error: +22.99 kcal/mol
+
+ts_095  (match: partial)
+  Reactant  XX:  IRC: C=C1[N][NH2]N=C1
+                 QRC05: [CH2]C1=N[NH2]N=C1
+  Product   OK:  IRC: Cc1cn[nH]n1
+                 QRC05: Cc1cn[nH]n1
+  Barrier error: +0.00 kcal/mol    Rxn energy error: -0.07 kcal/mol
+
+ts_182  (match: partial)
+  Reactant  OK:  IRC: [CH]COCC=N
+                 QRC05: [CH]COCC=N
+  Product   XX:  IRC: C=COC[CH][NH]
+                 QRC05: C=COCC=N
+  Barrier error: +0.15 kcal/mol    Rxn energy error: -1.80 kcal/mol
+
+ts_214  (match: partial)
+  Reactant  XX:  IRC: CC1=CC[C@@H]1C
+                 QRC05: C[C@H]1[C@@H]2C[C@]12C
+  Product   OK:  IRC: C[C@@]12CC[C@@H]1C2
+                 QRC05: C[C@@]12CC[C@@H]1C2
+  Barrier error: -16.41 kcal/mol    Rxn energy error: -16.41 kcal/mol
+
+ts_228  (match: partial)
+  Reactant  OK:  IRC: O=CC#CCO
+                 QRC05: O=CC#CCO
+  Product   XX:  IRC: O=C=[C][CH]CO
+                 QRC05: [O]C#C[CH]CO
+  Barrier error: +0.04 kcal/mol    Rxn energy error: +0.35 kcal/mol
+
+ts_248  (match: partial)
+  Reactant  OK:  IRC: C=O.[C]C#C[NH]
+                 QRC05: C=O.[C]C#C[NH]
+  Product   XX:  IRC: [C]=C(C#N)CO
+                 QRC05: C=O.[C]C#C[NH]
+  Barrier error: +0.41 kcal/mol    Rxn energy error: +11.47 kcal/mol
+
+ts_249  (match: partial)
+  Reactant  OK:  IRC: N#CC=C=CO
+                 QRC05: N#CC=C=CO
+  Product   XX:  IRC: N#C[C]/C=C\O
+                 QRC05: [C]=[C]/C=C\O.[N]
+  Barrier error: +0.01 kcal/mol    Rxn energy error: +296.10 kcal/mol
+
+ts_321  (match: partial)
+  Reactant  OK:  IRC: C[C]/C(O)=C\C
+                 QRC05: C[C]/C(O)=C\C
+  Product   XX:  IRC: CC#C[C@@H](C)O
+                 QRC05: [C]#C[CH][C@@H](C)O.[H].[H]
+  Barrier error: +0.21 kcal/mol    Rxn energy error: +296.52 kcal/mol
+
+ts_405  (match: partial)
+  Reactant  OK:  IRC: C[C@@H]1[C@H](O)[C@@H]1C
+                 QRC05: C[C@@H]1[C@H](O)[C@@H]1C
+  Product   XX:  IRC: C=CC(O)C=C.[H][H]
+                 QRC05: C#C[C@H](O)C=C.[H][H].[H][H]
+  Barrier error: +0.01 kcal/mol    Rxn energy error: +55.83 kcal/mol
+
+ts_425  (match: partial)
+  Reactant  XX:  IRC: OC[C]C1=C[C]1
+                 QRC05: OC[C][C]1[C][CH]1
+  Product   OK:  IRC: OC[C@]12[C]3[C]1[C@@H]32
+                 QRC05: OC[C@]12[C]3[C]1[C@@H]32
+  Barrier error: +0.01 kcal/mol    Rxn energy error: -0.02 kcal/mol
+
+ts_431  (match: partial)
+  Reactant  OK:  IRC: CC1=CN1[N][NH]
+                 QRC05: CC1=CN1[N][NH]
+  Product   XX:  IRC: [N]=[N]=N.CC#C
+                 QRC05: Cc1c[nH]nn1
+  Barrier error: +0.02 kcal/mol    Rxn energy error: -72.31 kcal/mol
+
+ts_482  (match: partial)
+  Reactant  XX:  IRC: C[C](C=O)[N][N]
+                 QRC05: Cc1conn1
+  Product   OK:  IRC: C[C]([C]O)[N][N]
+                 QRC05: C[C]([C]O)[N][N]
+  Barrier error: +0.96 kcal/mol    Rxn energy error: +0.95 kcal/mol
+
+ts_512  (match: partial)
+  Reactant  OK:  IRC: CC=O.[CH2][C][NH]
+                 QRC05: CC=O.[CH2][C][NH]
+  Product   XX:  IRC: C[C@@H](O)CC#N
+                 QRC05: C[CH][O].[CH2].[CH]=[N]
+  Barrier error: +0.14 kcal/mol    Rxn energy error: +571.40 kcal/mol
+
+ts_528  (match: partial)
+  Reactant  XX:  IRC: C1=COC1.C=N
+                 QRC05: C1=COC1.[CH2][NH]
+  Product   OK:  IRC: C1NC12COC2
+                 QRC05: C1NC12COC2
+  Barrier error: +0.16 kcal/mol    Rxn energy error: +0.14 kcal/mol
+
+ts_584  (match: partial)
+  Reactant  XX:  IRC: [N]N[N]C(=[N])O
+                 QRC05: O[C]1=NN[N]N=1
+  Product   OK:  IRC: [N]N[N][C][N]O
+                 QRC05: [N]N[N][C][N]O
+  Barrier error: +138.45 kcal/mol    Rxn energy error: +138.41 kcal/mol
+
+ts_593  (match: partial)
+  Reactant  OK:  IRC: C[C@H]1C[C@]1(C)O
+                 QRC05: C[C@H]1C[C@]1(C)O
+  Product   XX:  IRC: [CH]C(C)(O)CC
+                 QRC05: CC/C=C(\C)O
+  Barrier error: +0.01 kcal/mol    Rxn energy error: -79.11 kcal/mol
+
