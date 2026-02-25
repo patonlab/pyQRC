@@ -19,13 +19,36 @@ import re
 import shutil
 import subprocess
 import sys
-from argparse import ArgumentParser
+from argparse import ArgumentParser, Namespace
+from contextlib import contextmanager
 from glob import glob
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Generator
 
 import cclib
 import numpy as np
+
+
+class QRCParseError(Exception):
+    """Raised when parsing a computational chemistry output file fails."""
+
+
+@contextmanager
+def working_directory(path: Path) -> Generator[None, None, None]:
+    """Context manager for changing working directory with automatic restoration.
+
+    Args:
+        path: Directory to change to.
+
+    Yields:
+        None
+    """
+    original_dir = os.getcwd()
+    try:
+        os.chdir(path)
+        yield
+    finally:
+        os.chdir(original_dir)
 
 # Constants
 BOHR_TO_ANGSTROM = 1.88972612456506
@@ -363,8 +386,21 @@ class QRCGenerator:
             num: Specific mode number to displace along (1-indexed).
         """
         # Parse computational chemistry output with cclib
-        parser = cclib.io.ccopen(file)
-        data = parser.parse()
+        try:
+            parser = cclib.io.ccopen(file)
+            if parser is None:
+                raise QRCParseError(
+                    f"Could not determine file format for '{file}'. "
+                    "Ensure it is a valid Gaussian, ORCA, or Q-Chem output file."
+                )
+            data = parser.parse()
+        except Exception as exc:
+            if isinstance(exc, QRCParseError):
+                raise
+            raise QRCParseError(
+                f"Failed to parse '{file}': {exc}. "
+                "The file may be corrupted or from an unsupported format."
+            ) from exc
 
         file_path = Path(file)
 
@@ -599,7 +635,7 @@ def g16_opt(comfile: str) -> None:
 
 def run_irc(
     file: str,
-    options,
+    options: Namespace,
     num: int,
     amp: float,
     lot_bs: str,
@@ -629,8 +665,12 @@ def run_irc(
         log_output.write(f'x  Skipping {file_path.stem}_{suffix}.com due to overlap in atoms')
 
 
-def main():
-    """Main entry point for pyQRC command-line interface."""
+def main() -> int:
+    """Main entry point for pyQRC command-line interface.
+
+    Returns:
+        Exit code: 0 for success, 1 if any files failed to process.
+    """
     parser = ArgumentParser(
         description="pyQRC - a quick alternative to IRC calculations",
         usage="%(prog)s [options] <input1>.log <input2>.log ..."
@@ -657,8 +697,8 @@ def main():
         metavar="ROUTE", help="calculation route (defaults to same as original file)"
     )
     parser.add_argument(
-        "-v", dest="verbose", action="store_true", default=True,
-        help="verbose output"
+        "-q", "--quiet", dest="verbose", action="store_false", default=True,
+        help="suppress verbose output"
     )
     parser.add_argument(
         "--auto", dest="auto", action="store_true", default=False,
@@ -697,10 +737,20 @@ def main():
         except IndexError:
             pass
 
+    exit_code = 0
     for file in files:
         # Parse output with cclib and count imaginary frequencies
-        parser_cc = cclib.io.ccopen(file)
-        data = parser_cc.parse()
+        try:
+            parser_cc = cclib.io.ccopen(file)
+            if parser_cc is None:
+                print(f'x   {file} could not be parsed (unknown format): skipping')
+                exit_code = 1
+                continue
+            data = parser_cc.parse()
+        except Exception as exc:
+            print(f'x   {file} failed to parse: {exc}')
+            exit_code = 1
+            continue
 
         if hasattr(data, 'vibfreqs'):
             im_freq = len([val for val in data.vibfreqs if val < 0])
@@ -719,10 +769,14 @@ def main():
                 elif args.freqnum is not None:
                     print(f'o   {file} will be distorted along freq #{args.freqnum}: processing')
 
-                QRCGenerator(
-                    file, args.amplitude, args.nproc, args.mem, args.route,
-                    args.verbose, args.suffix, args.freq, args.freqnum
-                )
+                try:
+                    QRCGenerator(
+                        file, args.amplitude, args.nproc, args.mem, args.route,
+                        args.verbose, args.suffix, args.freq, args.freqnum
+                    )
+                except QRCParseError as exc:
+                    print(f'x   {file} failed: {exc}')
+                    exit_code = 1
 
         else:
             # Automatic calculations (single points for stability check)
@@ -754,21 +808,21 @@ def main():
 
                 log_output.write(f'o  Entering directory {num_dir}')
                 shutil.copyfile(file, num_dir / file_path.name)
-                os.chdir(num_dir)
 
-                for amp in amp_base:
-                    suffix = f'num_{num}_amp_{str(amp).replace(".", "")}'
-                    gdata = OutputData(file)
-                    run_irc(
-                        file_path.name, args, num, amp, gdata.LEVELOFTHEORY,
-                        suffix, log_output
-                    )
-                    log_output.write(f'o  Writing to file {file_path.stem}_{suffix}')
-
-                os.chdir(parent_dir)
+                with working_directory(num_dir):
+                    for amp in amp_base:
+                        suffix = f'num_{num}_amp_{str(amp).replace(".", "")}'
+                        gdata = OutputData(file)
+                        run_irc(
+                            file_path.name, args, num, amp, gdata.LEVELOFTHEORY,
+                            suffix, log_output
+                        )
+                        log_output.write(f'o  Writing to file {file_path.stem}_{suffix}')
 
             log_output.close()
 
+    return exit_code
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
