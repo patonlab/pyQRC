@@ -7,6 +7,7 @@ displacing molecular structures along normal modes.
 
 from pyqrc.pyQRC import (
     QRCGenerator,
+    QRCParseError,
     OutputData,
     Logger,
     mwdist,
@@ -23,6 +24,7 @@ __email__ = "robert.paton@colostate.edu"
 
 __all__ = [
     "QRCGenerator",
+    "QRCParseError",
     "OutputData",
     "Logger",
     "mwdist",

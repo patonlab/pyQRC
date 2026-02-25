@@ -85,3 +85,7 @@ disable = [
 
 [tool.pylint.format]
 max-line-length = 120
+
+[tool.ruff.lint]
+# Ignore unused variable warnings in tests (common pattern for testing side effects)
+per-file-ignores = {"tests/*" = ["F841"]}

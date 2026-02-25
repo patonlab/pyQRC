@@ -42,8 +42,8 @@ def get_all_example_files():
         for f in g16_path.glob('*.log'):
             examples.append((f, 'Gaussian'))
 
-    # ORCA files (.out)
-    orca_path = EXAMPLES_PATH / 'orca6'
+    # ORCA files (.out) - using orca5 for better cclib compatibility
+    orca_path = EXAMPLES_PATH / 'orca5'
     if orca_path.exists():
         for f in orca_path.glob('*.out'):
             examples.append((f, 'ORCA'))
@@ -118,14 +118,14 @@ def g16_planar_chex():
 
 @pytest.fixture
 def orca_acetaldehyde():
-    """ORCA 6 acetaldehyde frequency output."""
-    return datapath('orca6/acetaldehyde.out')
+    """ORCA 5 acetaldehyde frequency output."""
+    return datapath('orca5/acetaldehyde.out')
 
 
 @pytest.fixture
 def orca_claisen_ts():
-    """ORCA 6 Claisen TS frequency output."""
-    return datapath('orca6/claisen_ts.out')
+    """ORCA 5 Claisen TS frequency output."""
+    return datapath('orca5/claisen_ts.out')
 
 
 @pytest.fixture
