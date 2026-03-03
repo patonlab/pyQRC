@@ -1,0 +1,17 @@
+name: VibeGuard Code Quality
+
+on: [push, pull_request]
+
+jobs:
+  vibe-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 50  # Required for git history audit
+      
+      - name: Run VibeGuard Auditor
+        uses: fabriziosalmi/vibe-check@main
+        with:
+          threshold: 800
+          brutal_mode: false
