@@ -1734,6 +1734,54 @@ class TestQcoordMode:
         assert 'no imaginary frequencies: check for stability' in log_content
 
 
+class TestCLIFailureModes:
+    """Characterization tests for desired CLI failure behavior (ROADMAP 0.3).
+
+    Marked strict-xfail until the corresponding fixes land:
+    missing files (1.3), unmatched --freq / out-of-range --freqnum (1.2).
+    """
+
+    @pytest.mark.xfail(strict=True, reason="ROADMAP 1.3: missing files currently exit 0 silently")
+    def test_missing_file_exits_nonzero(self, tmp_path, monkeypatch, capsys):
+        """A nonexistent input file should produce an error message and exit 1."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr('sys.argv', ['pyqrc', str(tmp_path / 'does_not_exist.log')])
+        exit_code = main()
+
+        captured = capsys.readouterr()
+        assert exit_code == 1
+        assert 'no such file' in captured.out
+
+    @pytest.mark.xfail(strict=True, reason="ROADMAP 1.2: unmatched --freq currently writes an undisplaced input")
+    def test_unmatched_freq_errors_and_writes_nothing(self, g16_claisen_ts, temp_workdir, monkeypatch, capsys):
+        """--freq matching no normal mode should exit 1 and write no input file."""
+        shutil.copy(g16_claisen_ts, temp_workdir)
+        local_file = temp_workdir / g16_claisen_ts.name
+
+        # -123.45 cm-1 is not within tolerance of any mode in this file
+        monkeypatch.setattr('sys.argv', ['pyqrc', '-f', '-123.45', str(local_file)])
+        exit_code = main()
+
+        captured = capsys.readouterr()
+        assert exit_code == 1
+        assert 'failed' in captured.out
+        assert not (temp_workdir / f"{local_file.stem}_QRC.com").exists()
+
+    @pytest.mark.xfail(strict=True, reason="ROADMAP 1.2: out-of-range --freqnum currently writes an undisplaced input")
+    def test_out_of_range_freqnum_errors_and_writes_nothing(self, g16_claisen_ts, temp_workdir, monkeypatch, capsys):
+        """--freqnum beyond the number of modes should exit 1 and write no input file."""
+        shutil.copy(g16_claisen_ts, temp_workdir)
+        local_file = temp_workdir / g16_claisen_ts.name
+
+        monkeypatch.setattr('sys.argv', ['pyqrc', '--freqnum', '99', str(local_file)])
+        exit_code = main()
+
+        captured = capsys.readouterr()
+        assert exit_code == 1
+        assert 'failed' in captured.out
+        assert not (temp_workdir / f"{local_file.stem}_QRC.com").exists()
+
+
 class TestMainModule:
     """Tests for __main__.py entry point."""
 
