@@ -35,6 +35,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Chemistry",
 ]
 requires-python = ">=3.9"
@@ -89,7 +90,3 @@ disable = [
 
 [tool.pylint.format]
 max-line-length = 120
-
-[tool.ruff.lint]
-# Ignore unused variable warnings in tests (common pattern for testing side effects)
-per-file-ignores = {"tests/*" = ["F841"]}
