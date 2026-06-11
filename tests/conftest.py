@@ -3,7 +3,16 @@
 
 from pathlib import Path
 
+import cclib
 import pytest
+
+# cclib development builds (e.g. installed from git master for ORCA 6 support)
+# have a known Q-Chem parsing regression; release builds must pass Q-Chem tests
+CCLIB_DEV_BUILD = 'post' in getattr(cclib, '__version__', '')
+QCHEM_DEV_CCLIB_SKIP = pytest.mark.skipif(
+    CCLIB_DEV_BUILD,
+    reason="cclib development build: known Q-Chem parsing regression (see README)",
+)
 
 # Determine the base path for test data
 try:
@@ -147,6 +156,17 @@ def temp_workdir(tmp_path, monkeypatch):
     return tmp_path
 
 
+def _params(files):
+    """Build pytest params, skipping Q-Chem entries on cclib dev builds."""
+    return [
+        pytest.param(
+            str(f), fmt, id=f.stem,
+            marks=[QCHEM_DEV_CCLIB_SKIP] if fmt == 'QChem' else []
+        )
+        for f, fmt in files
+    ]
+
+
 # Parametrized fixtures for running tests against all example files
 def pytest_generate_tests(metafunc):
     """Generate test parameters for example file fixtures."""
@@ -154,26 +174,14 @@ def pytest_generate_tests(metafunc):
     if 'example_file' in metafunc.fixturenames:
         examples = get_all_example_files()
         if examples:
-            metafunc.parametrize(
-                'example_file,example_format',
-                [(str(f), fmt) for f, fmt in examples],
-                ids=[f.stem for f, _ in examples]
-            )
+            metafunc.parametrize('example_file,example_format', _params(examples))
 
     if 'ts_file' in metafunc.fixturenames:
         ts_files = get_example_files_by_type('ts')
         if ts_files:
-            metafunc.parametrize(
-                'ts_file,ts_format',
-                [(str(f), fmt) for f, fmt in ts_files],
-                ids=[f.stem for f, _ in ts_files]
-            )
+            metafunc.parametrize('ts_file,ts_format', _params(ts_files))
 
     if 'saddle_file' in metafunc.fixturenames:
         saddle_files = get_example_files_by_type('saddle')
         if saddle_files:
-            metafunc.parametrize(
-                'saddle_file,saddle_format',
-                [(str(f), fmt) for f, fmt in saddle_files],
-                ids=[f.stem for f, _ in saddle_files]
-            )
+            metafunc.parametrize('saddle_file,saddle_format', _params(saddle_files))

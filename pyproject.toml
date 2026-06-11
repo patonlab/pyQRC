@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyqrc"
-version = "2.2.0"
+dynamic = ["version"]
 description = "A Python program to project computed structures along normal modes for Quick Reaction Coordinate calculations"
 readme = "README.md"
 license = {text = "MIT"}
@@ -35,12 +35,13 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Chemistry",
 ]
 requires-python = ">=3.9"
 dependencies = [
-    "cclib",
-    "numpy",
+    "cclib>=1.8.1,<2",
+    "numpy>=1.22",
 ]
 
 [project.optional-dependencies]
@@ -63,6 +64,9 @@ pyqrc = "pyqrc.pyQRC:main"
 packages = ["pyqrc"]
 include-package-data = true
 
+[tool.setuptools.dynamic]
+version = {attr = "pyqrc.pyQRC.__version__"}
+
 [tool.setuptools.package-data]
 pyqrc = ["run_g16.sh"]
 
@@ -75,6 +79,7 @@ disable = [
     "missing-function-docstring",
     "invalid-name",
     "too-many-arguments",
+    "too-many-instance-attributes",
     "too-many-positional-arguments",
     "too-many-locals",
     "too-many-branches",
@@ -85,7 +90,3 @@ disable = [
 
 [tool.pylint.format]
 max-line-length = 120
-
-[tool.ruff.lint]
-# Ignore unused variable warnings in tests (common pattern for testing side effects)
-per-file-ignores = {"tests/*" = ["F841"]}

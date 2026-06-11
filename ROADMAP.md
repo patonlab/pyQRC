@@ -51,10 +51,10 @@ Note (D3): per the README "ORCA 6 compatibility" section, cclib 1.8.1 is incompa
 
 | # | Task | Files | Acceptance criteria | Size | Risk | Deps |
 |---|------|-------|---------------------|------|------|------|
-| 2.1 | Dependency bounds per D3: `cclib>=1.8.1,<2`, `numpy>=1.22`; README support-matrix note | `pyproject.toml`, `README.md` | Fresh install resolves to a combination the suite passes on | S | Low | — |
-| 2.2 | Refactor `QRCGenerator.__init__` into `_parse()` → `compute_displacement()` (pure: copies coords, never mutates cclib data) → `write_files()`; `__init__` calls all three (backwards-compatible); use `with Logger(...)` at all call sites so handles can't leak on exceptions | `pyqrc/pyQRC.py` | All existing tests pass unmodified; new unit test obtains displaced coordinates with zero files written | M | Medium | 0.3 |
-| 2.3 | De-skip the suite: remove existence-checks/skips for fixtures that live in the repo; cclib parse failures on repo examples become failures or strict xfails with a tracked reason | `tests/test_pyqrc.py`, `tests/conftest.py` | `pytest` reports 0 skips in-repo | M | Low | 2.1 |
-| 2.4 | Single-source the version (keep one literal; others read it, e.g. `importlib.metadata`) | `pyproject.toml`, `pyqrc/__init__.py`, `pyqrc/pyQRC.py` | Version string appears in exactly one file | S | Low | — |
+| 2.1 ✅ | Dependency bounds per D3: `cclib>=1.8.1,<2`, `numpy>=1.22`; README support-matrix note | `pyproject.toml`, `README.md` | Fresh install resolves to a combination the suite passes on | S | Low | — |
+| 2.2 ✅ | Refactor `QRCGenerator.__init__` into `_parse()` → `compute_displacement()` (pure: copies coords, never mutates cclib data) → `write_files()`; `__init__` calls all three (backwards-compatible); use `with Logger(...)` at all call sites so handles can't leak on exceptions | `pyqrc/pyQRC.py` | All existing tests pass unmodified; new unit test obtains displaced coordinates with zero files written | M | Medium | 0.3 |
+| 2.3 ✅ | De-skip the suite: remove existence-checks/skips for fixtures that live in the repo; cclib parse failures on repo examples become failures or strict xfails with a tracked reason | `tests/test_pyqrc.py`, `tests/conftest.py` | `pytest` reports 0 skips in-repo | M | Low | 2.1 |
+| 2.4 ✅ | Single-source the version (keep one literal; others read it, e.g. `importlib.metadata`) | `pyproject.toml`, `pyqrc/__init__.py`, `pyqrc/pyQRC.py` | Version string appears in exactly one file | S | Low | — |
 
 ## Milestone 3 — Quality & Polish
 
@@ -62,7 +62,7 @@ Note (D3): per the README "ORCA 6 compatibility" section, cclib 1.8.1 is incompa
 |---|------|-------|---------------------|------|------|------|
 | 3.1 | `--qcoord` robustness (only if D1 usage evidence appears): open the RUNIRC log once per run (not per file, which truncates it); try/except around per-file work; hoist `OutputData` out of the amplitude loop | `pyqrc/pyQRC.py` | Multi-file `--qcoord` keeps one complete log; one bad file doesn't abort the batch | M | Medium | 2.2 |
 | 3.2 | ~~Rename `BOHR_TO_ANGSTROM` → `ANGSTROM_TO_BOHR`~~ (✅ done June 2026); error out instead of writing `METHOD None`/`BASIS None` in Q-Chem inputs; delete the unused `TERMINATION` attribute or use it to warn on abnormal termination | `pyqrc/pyQRC.py` | No misnamed constant; Q-Chem path errors clearly when metadata is missing | S | Low | — |
-| 3.3 | CI/lint tidy-up: pylint workflow on `[push, pull_request]`; add ruff to dev deps + CI **or** delete the orphan `[tool.ruff.lint]` config; add Python 3.13 to both CI matrices and classifiers (D5) | `.github/workflows/pylint.yml`, `pyproject.toml`, `.circleci/config.yml` | PRs from forks get linted; no orphan tool config; 3.13 green | S | Low | — |
+| 3.3 ✅ | CI/lint tidy-up: pylint workflow on `[push, pull_request]`; orphan `[tool.ruff.lint]` config deleted (pylint is the enforced linter); Python 3.13 added to both CI matrices and classifiers (D5) | `.github/workflows/pylint.yml`, `pyproject.toml`, `.circleci/config.yml` | PRs from forks get linted; no orphan tool config; 3.13 green | S | Low | — |
 | 3.4 | Audit the README options table against `pyqrc --help` (the `-v` → `-q` fix is already done) | `README.md` | Table matches `--help` verbatim | S | None | 1.2 |
 
 ## Quick wins (all S, can be done immediately)
@@ -72,9 +72,13 @@ Note (D3): per the README "ORCA 6 compatibility" section, cclib 1.8.1 is incompa
 3. ~~Wheel-content CI check (0.2)~~ ✅ done June 2026
 4. ~~Pylint on `pull_request` (part of 3.3)~~ ✅ done June 2026
 
-**Milestones 0 and 1 are complete** (June 2026): packaging fixed and CI-guarded,
-missing files and unmatched `--freq`/`--freqnum` now fail loudly, version bumped
-to 2.2.0 (needs a PyPI release). Next up: Milestone 2.
+**Milestones 0, 1, and 2 are complete** (June 2026): packaging fixed and
+CI-guarded, missing files and unmatched `--freq`/`--freqnum` fail loudly,
+dependencies bounded, version single-sourced, `QRCGenerator` split into
+parse/compute/write with a `write=False` library mode, and the suite runs
+with zero skips on release cclib. Version 2.2.0 needs a PyPI release.
+Remaining: 3.1 (`--qcoord` robustness, deferred per D1), 3.2 (Q-Chem
+`METHOD None` guard + unused `TERMINATION`), 3.4 (README/--help audit).
 
 ## Releasing
 

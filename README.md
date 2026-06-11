@@ -98,8 +98,8 @@ pyQRC generates the following files:
 ## Dependencies
 
 - [Python](https://www.python.org/) >= 3.9
-- [cclib](https://cclib.github.io/)
-- [NumPy](https://numpy.org/)
+- [cclib](https://cclib.github.io/) >= 1.8.1, < 2 (ORCA 6 outputs need a newer cclib than 1.8.1 — see "ORCA 6 compatibility" above)
+- [NumPy](https://numpy.org/) >= 1.22
 - One of the following computational chemistry packages:
   - [Gaussian09](https://gaussian.com/glossary/g09/) / [Gaussian16](https://gaussian.com/gaussian16/)
   - [ORCA](https://sites.google.com/site/orcainputlibrary/home/) >= 4.0
