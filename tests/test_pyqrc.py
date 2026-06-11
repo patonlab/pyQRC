@@ -9,6 +9,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
+from tests.conftest import QCHEM_DEV_CCLIB_SKIP
 from pyqrc.pyQRC import (
     ATOMIC_MASSES,
     COVALENT_RADII,
@@ -150,22 +151,16 @@ class TestOutputData:
 
     def test_gaussian_format_detection(self, g16_acetaldehyde):
         """Test Gaussian format is detected."""
-        if not g16_acetaldehyde.exists():
-            pytest.skip("Gaussian test file not found")
         data = OutputData(str(g16_acetaldehyde))
         assert data.format == "Gaussian"
 
     def test_orca_format_detection(self, orca_acetaldehyde):
         """Test ORCA format is detected."""
-        if not orca_acetaldehyde.exists():
-            pytest.skip("ORCA test file not found")
         data = OutputData(str(orca_acetaldehyde))
         assert data.format == "ORCA"
 
     def test_qchem_format_detection(self, qchem_acetaldehyde):
         """Test Q-Chem format is detected."""
-        if not qchem_acetaldehyde.exists():
-            pytest.skip("Q-Chem test file not found")
         data = OutputData(str(qchem_acetaldehyde))
         assert data.format == "QChem"
 
@@ -176,29 +171,22 @@ class TestQRCGeneratorAllFiles:
     def test_qrc_generation(self, example_file, example_format, temp_workdir):
         """Test QRC generation for all example files."""
         filepath = Path(example_file)
-        if not filepath.exists():
-            pytest.skip(f"{example_format} test file not found")
 
         # Copy file to temp directory
         shutil.copy(filepath, temp_workdir)
         local_file = temp_workdir / filepath.name
 
-        try:
-            qrc = QRCGenerator(
-                file=str(local_file),
-                amplitude=0.2,
-                nproc=1,
-                mem="4GB",
-                route=None,
-                verbose=True,
-                suffix="QRC",
-                val=None,
-                num=None
-            )
-        except (IndexError, AttributeError, QRCParseError) as e:
-            # cclib may have parsing issues with certain output formats
-            # (e.g. Q-Chem regression in cclib master as of 2026-04; ORCA 6 needs cclib>1.8.1)
-            pytest.skip(f"cclib parsing error for {example_format}: {e}")
+        qrc = QRCGenerator(
+            file=str(local_file),
+            amplitude=0.2,
+            nproc=1,
+            mem="4GB",
+            route=None,
+            verbose=True,
+            suffix="QRC",
+            val=None,
+            num=None
+        )
 
         assert qrc.CARTESIAN is not None
         assert qrc.NEW_CARTESIAN is not None
@@ -222,28 +210,21 @@ class TestQRCGeneratorTS:
     def test_ts_displacement(self, ts_file, ts_format, temp_workdir):
         """Test that TS structures are displaced along imaginary mode."""
         filepath = Path(ts_file)
-        if not filepath.exists():
-            pytest.skip("TS test file not found")
 
         shutil.copy(filepath, temp_workdir)
         local_file = temp_workdir / filepath.name
 
-        try:
-            qrc = QRCGenerator(
-                file=str(local_file),
-                amplitude=0.2,
-                nproc=1,
-                mem="4GB",
-                route=None,
-                verbose=True,
-                suffix="QRC",
-                val=None,
-                num=None
-            )
-        except (IndexError, AttributeError, QRCParseError) as e:
-            # cclib may have parsing issues with certain output formats
-            # (e.g. Q-Chem regression in cclib master as of 2026-04; ORCA 6 needs cclib>1.8.1)
-            pytest.skip(f"cclib parsing error for {ts_format}: {e}")
+        qrc = QRCGenerator(
+            file=str(local_file),
+            amplitude=0.2,
+            nproc=1,
+            mem="4GB",
+            route=None,
+            verbose=True,
+            suffix="QRC",
+            val=None,
+            num=None
+        )
 
         # Structure should have been displaced (TS has imaginary frequency)
         displacement = np.linalg.norm(
@@ -258,26 +239,21 @@ class TestQRCGeneratorSaddle:
     def test_saddle_point_displacement(self, saddle_file, saddle_format, temp_workdir):
         """Test that saddle point structures are displaced along imaginary modes."""
         filepath = Path(saddle_file)
-        if not filepath.exists():
-            pytest.skip("Saddle point test file not found")
 
         shutil.copy(filepath, temp_workdir)
         local_file = temp_workdir / filepath.name
 
-        try:
-            qrc = QRCGenerator(
-                file=str(local_file),
-                amplitude=0.2,
-                nproc=1,
-                mem="4GB",
-                route=None,
-                verbose=True,
-                suffix="QRC",
-                val=None,
-                num=None
-            )
-        except (IndexError, AttributeError) as e:
-            pytest.skip(f"cclib parsing error for {saddle_format}: {e}")
+        qrc = QRCGenerator(
+            file=str(local_file),
+            amplitude=0.2,
+            nproc=1,
+            mem="4GB",
+            route=None,
+            verbose=True,
+            suffix="QRC",
+            val=None,
+            num=None
+        )
 
         # Structure should have been displaced
         displacement = np.linalg.norm(
@@ -291,8 +267,6 @@ class TestQRCGeneratorOptions:
 
     def test_specific_frequency_number(self, g16_claisen_ts, temp_workdir):
         """Test displacement along specific frequency number."""
-        if not g16_claisen_ts.exists():
-            pytest.skip("Gaussian TS test file not found")
 
         shutil.copy(g16_claisen_ts, temp_workdir)
         local_file = temp_workdir / g16_claisen_ts.name
@@ -316,8 +290,6 @@ class TestQRCGeneratorOptions:
 
     def test_specific_mode_on_saddle(self, g16_planar_chex, temp_workdir):
         """Test displacement along specific mode on higher-order saddle point."""
-        if not g16_planar_chex.exists():
-            pytest.skip("Planar cyclohexane test file not found")
 
         shutil.copy(g16_planar_chex, temp_workdir)
         local_file = temp_workdir / g16_planar_chex.name
@@ -359,8 +331,6 @@ class TestQRCGeneratorOptions:
 
     def test_negative_amplitude(self, g16_claisen_ts, temp_workdir):
         """Test reverse displacement with negative amplitude."""
-        if not g16_claisen_ts.exists():
-            pytest.skip("Gaussian TS test file not found")
 
         shutil.copy(g16_claisen_ts, temp_workdir)
         local_file = temp_workdir / g16_claisen_ts.name
@@ -402,8 +372,6 @@ class TestQRCGeneratorOptions:
 
     def test_custom_nproc_and_mem(self, g16_acetaldehyde, temp_workdir):
         """Test that nproc and mem are written to output file."""
-        if not g16_acetaldehyde.exists():
-            pytest.skip("Gaussian test file not found")
 
         shutil.copy(g16_acetaldehyde, temp_workdir)
         local_file = temp_workdir / g16_acetaldehyde.name
@@ -432,8 +400,6 @@ class TestIntegration:
 
     def test_no_overlap_warning(self, g16_acetaldehyde, temp_workdir):
         """Test that normal displacements don't cause overlap."""
-        if not g16_acetaldehyde.exists():
-            pytest.skip("Gaussian test file not found")
 
         shutil.copy(g16_acetaldehyde, temp_workdir)
         local_file = temp_workdir / g16_acetaldehyde.name
@@ -454,8 +420,6 @@ class TestIntegration:
 
     def test_large_amplitude_runs(self, g16_claisen_ts, temp_workdir):
         """Test that very large amplitudes still run (may cause overlap)."""
-        if not g16_claisen_ts.exists():
-            pytest.skip("Gaussian TS test file not found")
 
         shutil.copy(g16_claisen_ts, temp_workdir)
         local_file = temp_workdir / g16_claisen_ts.name
@@ -487,8 +451,6 @@ class TestMain:
 
     def test_main_with_single_file(self, g16_acetaldehyde, temp_workdir, monkeypatch):
         """Test main with a single file argument."""
-        if not g16_acetaldehyde.exists():
-            pytest.skip("Gaussian test file not found")
 
         shutil.copy(g16_acetaldehyde, temp_workdir)
         local_file = temp_workdir / g16_acetaldehyde.name
@@ -501,8 +463,6 @@ class TestMain:
 
     def test_main_with_amplitude_option(self, g16_claisen_ts, temp_workdir, monkeypatch):
         """Test main with --amp option."""
-        if not g16_claisen_ts.exists():
-            pytest.skip("Gaussian TS test file not found")
 
         shutil.copy(g16_claisen_ts, temp_workdir)
         local_file = temp_workdir / g16_claisen_ts.name
@@ -514,8 +474,6 @@ class TestMain:
 
     def test_main_with_nproc_and_mem(self, g16_acetaldehyde, temp_workdir, monkeypatch):
         """Test main with --nproc and --mem options."""
-        if not g16_acetaldehyde.exists():
-            pytest.skip("Gaussian test file not found")
 
         shutil.copy(g16_acetaldehyde, temp_workdir)
         local_file = temp_workdir / g16_acetaldehyde.name
@@ -533,8 +491,6 @@ class TestMain:
 
     def test_main_with_custom_suffix(self, g16_acetaldehyde, temp_workdir, monkeypatch):
         """Test main with --name option for custom suffix."""
-        if not g16_acetaldehyde.exists():
-            pytest.skip("Gaussian test file not found")
 
         shutil.copy(g16_acetaldehyde, temp_workdir)
         local_file = temp_workdir / g16_acetaldehyde.name
@@ -546,8 +502,6 @@ class TestMain:
 
     def test_main_with_freq_option(self, g16_claisen_ts, temp_workdir, monkeypatch):
         """Test main with --freq option to specify frequency value."""
-        if not g16_claisen_ts.exists():
-            pytest.skip("Gaussian TS test file not found")
 
         import cclib
 
@@ -566,8 +520,6 @@ class TestMain:
 
     def test_main_with_freqnum_option(self, g16_claisen_ts, temp_workdir, monkeypatch):
         """Test main with --freqnum option."""
-        if not g16_claisen_ts.exists():
-            pytest.skip("Gaussian TS test file not found")
 
         shutil.copy(g16_claisen_ts, temp_workdir)
         local_file = temp_workdir / g16_claisen_ts.name
@@ -579,8 +531,6 @@ class TestMain:
 
     def test_main_with_custom_route(self, g16_acetaldehyde, temp_workdir, monkeypatch):
         """Test main with --route option."""
-        if not g16_acetaldehyde.exists():
-            pytest.skip("Gaussian test file not found")
 
         shutil.copy(g16_acetaldehyde, temp_workdir)
         local_file = temp_workdir / g16_acetaldehyde.name
@@ -597,8 +547,6 @@ class TestMain:
 
     def test_main_auto_processes_imaginary(self, g16_claisen_ts, temp_workdir, monkeypatch, capsys):
         """Test main with --auto processes files with imaginary frequencies."""
-        if not g16_claisen_ts.exists():
-            pytest.skip("Gaussian TS test file not found")
 
         shutil.copy(g16_claisen_ts, temp_workdir)
         local_file = temp_workdir / g16_claisen_ts.name
@@ -615,22 +563,16 @@ class TestOutputDataExtended:
 
     def test_gaussian_termination_normal(self, g16_acetaldehyde):
         """Test Gaussian normal termination is detected."""
-        if not g16_acetaldehyde.exists():
-            pytest.skip("Gaussian test file not found")
         data = OutputData(str(g16_acetaldehyde))
         assert data.TERMINATION == "normal"
 
     def test_gaussian_jobtype_extraction(self, g16_acetaldehyde):
         """Test Gaussian job type is extracted."""
-        if not g16_acetaldehyde.exists():
-            pytest.skip("Gaussian test file not found")
         data = OutputData(str(g16_acetaldehyde))
         assert data.JOBTYPE is not None
 
     def test_gaussian_level_of_theory(self, g16_acetaldehyde):
         """Test Gaussian level of theory is extracted."""
-        if not g16_acetaldehyde.exists():
-            pytest.skip("Gaussian test file not found")
         data = OutputData(str(g16_acetaldehyde))
         assert data.LEVELOFTHEORY is not None
         # Should be in format "level/basis"
@@ -638,15 +580,11 @@ class TestOutputDataExtended:
 
     def test_orca_jobtype_extraction(self, orca_acetaldehyde):
         """Test ORCA job type is extracted."""
-        if not orca_acetaldehyde.exists():
-            pytest.skip("ORCA test file not found")
         data = OutputData(str(orca_acetaldehyde))
         assert data.JOBTYPE is not None
 
     def test_qchem_format_no_termination(self, qchem_acetaldehyde):
         """Test Q-Chem format detection (termination not implemented for Q-Chem)."""
-        if not qchem_acetaldehyde.exists():
-            pytest.skip("Q-Chem test file not found")
         data = OutputData(str(qchem_acetaldehyde))
         assert data.format == "QChem"
         # Q-Chem termination detection not implemented
@@ -658,26 +596,21 @@ class TestQRCGeneratorFormats:
 
     def test_orca_output_format(self, orca_acetaldehyde, temp_workdir):
         """Test ORCA input file generation."""
-        if not orca_acetaldehyde.exists():
-            pytest.skip("ORCA test file not found")
 
         shutil.copy(orca_acetaldehyde, temp_workdir)
         local_file = temp_workdir / orca_acetaldehyde.name
 
-        try:
-            qrc = QRCGenerator(
-                file=str(local_file),
-                amplitude=0.2,
-                nproc=2,
-                mem="8GB",
-                route=None,
-                verbose=True,
-                suffix="QRC",
-                val=None,
-                num=None
-            )
-        except (IndexError, AttributeError, QRCParseError) as e:
-            pytest.skip(f"cclib parsing error: {e}")
+        qrc = QRCGenerator(
+            file=str(local_file),
+            amplitude=0.2,
+            nproc=2,
+            mem="8GB",
+            route=None,
+            verbose=True,
+            suffix="QRC",
+            val=None,
+            num=None
+        )
 
         output_file = temp_workdir / f"{local_file.stem}_QRC.inp"
         assert output_file.exists()
@@ -689,26 +622,21 @@ class TestQRCGeneratorFormats:
 
     def test_orca_memory_gb_conversion(self, orca_acetaldehyde, temp_workdir):
         """Test ORCA memory is converted from GB to MB."""
-        if not orca_acetaldehyde.exists():
-            pytest.skip("ORCA test file not found")
 
         shutil.copy(orca_acetaldehyde, temp_workdir)
         local_file = temp_workdir / orca_acetaldehyde.name
 
-        try:
-            QRCGenerator(
-                file=str(local_file),
-                amplitude=0.2,
-                nproc=1,
-                mem="4GB",
-                route=None,
-                verbose=False,
-                suffix="QRC",
-                val=None,
-                num=None
-            )
-        except (IndexError, AttributeError, QRCParseError) as e:
-            pytest.skip(f"cclib parsing error: {e}")
+        QRCGenerator(
+            file=str(local_file),
+            amplitude=0.2,
+            nproc=1,
+            mem="4GB",
+            route=None,
+            verbose=False,
+            suffix="QRC",
+            val=None,
+            num=None
+        )
 
         output_file = temp_workdir / f"{local_file.stem}_QRC.inp"
         content = output_file.read_text()
@@ -717,54 +645,45 @@ class TestQRCGeneratorFormats:
 
     def test_orca_memory_mb(self, orca_acetaldehyde, temp_workdir):
         """Test ORCA memory with MB input."""
-        if not orca_acetaldehyde.exists():
-            pytest.skip("ORCA test file not found")
 
         shutil.copy(orca_acetaldehyde, temp_workdir)
         local_file = temp_workdir / orca_acetaldehyde.name
 
-        try:
-            QRCGenerator(
-                file=str(local_file),
-                amplitude=0.2,
-                nproc=1,
-                mem="2000MB",
-                route=None,
-                verbose=False,
-                suffix="QRC_MB",
-                val=None,
-                num=None
-            )
-        except (IndexError, AttributeError, QRCParseError) as e:
-            pytest.skip(f"cclib parsing error: {e}")
+        QRCGenerator(
+            file=str(local_file),
+            amplitude=0.2,
+            nproc=1,
+            mem="2000MB",
+            route=None,
+            verbose=False,
+            suffix="QRC_MB",
+            val=None,
+            num=None
+        )
 
         output_file = temp_workdir / f"{local_file.stem}_QRC_MB.inp"
         content = output_file.read_text()
         # Should keep MB value
         assert '%maxcore 2000' in content
 
+    @QCHEM_DEV_CCLIB_SKIP
     def test_qchem_output_format(self, qchem_acetaldehyde, temp_workdir):
         """Test Q-Chem input file generation."""
-        if not qchem_acetaldehyde.exists():
-            pytest.skip("Q-Chem test file not found")
 
         shutil.copy(qchem_acetaldehyde, temp_workdir)
         local_file = temp_workdir / qchem_acetaldehyde.name
 
-        try:
-            qrc = QRCGenerator(
-                file=str(local_file),
-                amplitude=0.2,
-                nproc=1,
-                mem="4GB",
-                route=None,
-                verbose=True,
-                suffix="QRC",
-                val=None,
-                num=None
-            )
-        except (IndexError, AttributeError, QRCParseError) as e:
-            pytest.skip(f"cclib parsing error: {e}")
+        qrc = QRCGenerator(
+            file=str(local_file),
+            amplitude=0.2,
+            nproc=1,
+            mem="4GB",
+            route=None,
+            verbose=True,
+            suffix="QRC",
+            val=None,
+            num=None
+        )
 
         output_file = temp_workdir / f"{local_file.stem}_QRC.inp"
         assert output_file.exists()
@@ -780,8 +699,6 @@ class TestQRCGeneratorCustomRoute:
 
     def test_custom_route_gaussian(self, g16_acetaldehyde, temp_workdir):
         """Test custom route for Gaussian format."""
-        if not g16_acetaldehyde.exists():
-            pytest.skip("Gaussian test file not found")
 
         shutil.copy(g16_acetaldehyde, temp_workdir)
         local_file = temp_workdir / g16_acetaldehyde.name
@@ -806,28 +723,23 @@ class TestQRCGeneratorCustomRoute:
 
     def test_custom_route_orca(self, orca_acetaldehyde, temp_workdir):
         """Test custom route for ORCA format."""
-        if not orca_acetaldehyde.exists():
-            pytest.skip("ORCA test file not found")
 
         shutil.copy(orca_acetaldehyde, temp_workdir)
         local_file = temp_workdir / orca_acetaldehyde.name
 
         custom_route = "BP86 def2-SVP TightSCF"
 
-        try:
-            QRCGenerator(
-                file=str(local_file),
-                amplitude=0.2,
-                nproc=1,
-                mem="4GB",
-                route=custom_route,
-                verbose=False,
-                suffix="QRC_custom",
-                val=None,
-                num=None
-            )
-        except (IndexError, AttributeError, QRCParseError) as e:
-            pytest.skip(f"cclib parsing error: {e}")
+        QRCGenerator(
+            file=str(local_file),
+            amplitude=0.2,
+            nproc=1,
+            mem="4GB",
+            route=custom_route,
+            verbose=False,
+            suffix="QRC_custom",
+            val=None,
+            num=None
+        )
 
         output_file = temp_workdir / f"{local_file.stem}_QRC_custom.inp"
         content = output_file.read_text()
@@ -839,8 +751,6 @@ class TestSpecificFrequencyValue:
 
     def test_val_parameter(self, g16_claisen_ts, temp_workdir):
         """Test QRCGenerator with val parameter for specific frequency."""
-        if not g16_claisen_ts.exists():
-            pytest.skip("Gaussian TS test file not found")
 
         import cclib
 
@@ -906,8 +816,6 @@ class TestEdgeCases:
 
     def test_verbose_false_no_qrc_file(self, g16_acetaldehyde, temp_workdir):
         """Test that verbose=False does not create .qrc file."""
-        if not g16_acetaldehyde.exists():
-            pytest.skip("Gaussian test file not found")
 
         shutil.copy(g16_acetaldehyde, temp_workdir)
         local_file = temp_workdir / g16_acetaldehyde.name
@@ -930,8 +838,6 @@ class TestEdgeCases:
 
     def test_positive_freq_mode_displacement(self, g16_acetaldehyde, temp_workdir):
         """Test displacement along a positive frequency mode."""
-        if not g16_acetaldehyde.exists():
-            pytest.skip("Gaussian test file not found")
 
         shutil.copy(g16_acetaldehyde, temp_workdir)
         local_file = temp_workdir / g16_acetaldehyde.name
@@ -961,8 +867,6 @@ class TestLevelOfTheory:
 
     def test_level_of_theory_gaussian_freq(self, g16_claisen_ts):
         """Test level of theory extraction from Gaussian freq output."""
-        if not g16_claisen_ts.exists():
-            pytest.skip("Gaussian TS test file not found")
         data = OutputData(str(g16_claisen_ts))
         lot = data.LEVELOFTHEORY
         assert lot is not None
@@ -974,8 +878,6 @@ class TestLevelOfTheory:
 
     def test_level_of_theory_orca(self, orca_claisen_ts):
         """Test level of theory extraction from ORCA output."""
-        if not orca_claisen_ts.exists():
-            pytest.skip("ORCA TS test file not found")
         data = OutputData(str(orca_claisen_ts))
         # ORCA uses _level_of_theory internally
         lot = data.LEVELOFTHEORY
@@ -988,8 +890,6 @@ class TestMainFileGlobbing:
 
     def test_main_with_glob_pattern(self, g16_acetaldehyde, temp_workdir, monkeypatch):
         """Test main with glob pattern for files."""
-        if not g16_acetaldehyde.exists():
-            pytest.skip("Gaussian test file not found")
 
         shutil.copy(g16_acetaldehyde, temp_workdir)
         local_file = temp_workdir / g16_acetaldehyde.name
@@ -1003,8 +903,6 @@ class TestMainFileGlobbing:
 
     def test_main_with_multiple_files(self, g16_acetaldehyde, g16_claisen_ts, temp_workdir, monkeypatch):
         """Test main with multiple file arguments."""
-        if not g16_acetaldehyde.exists() or not g16_claisen_ts.exists():
-            pytest.skip("Test files not found")
 
         shutil.copy(g16_acetaldehyde, temp_workdir)
         shutil.copy(g16_claisen_ts, temp_workdir)
@@ -1024,26 +922,21 @@ class TestORCAMemoryEdgeCases:
 
     def test_orca_memory_no_unit(self, orca_acetaldehyde, temp_workdir):
         """Test ORCA memory with numeric value only."""
-        if not orca_acetaldehyde.exists():
-            pytest.skip("ORCA test file not found")
 
         shutil.copy(orca_acetaldehyde, temp_workdir)
         local_file = temp_workdir / orca_acetaldehyde.name
 
-        try:
-            QRCGenerator(
-                file=str(local_file),
-                amplitude=0.2,
-                nproc=1,
-                mem="3000",  # No unit
-                route=None,
-                verbose=False,
-                suffix="QRC_nounit",
-                val=None,
-                num=None
-            )
-        except (IndexError, AttributeError, QRCParseError) as e:
-            pytest.skip(f"cclib parsing error: {e}")
+        QRCGenerator(
+            file=str(local_file),
+            amplitude=0.2,
+            nproc=1,
+            mem="3000",  # No unit
+            route=None,
+            verbose=False,
+            suffix="QRC_nounit",
+            val=None,
+            num=None
+        )
 
         output_file = temp_workdir / f"{local_file.stem}_QRC_nounit.inp"
         content = output_file.read_text()
@@ -1056,8 +949,6 @@ class TestPrintOutput:
 
     def test_main_prints_frequency_info(self, g16_claisen_ts, temp_workdir, monkeypatch, capsys):
         """Test main prints frequency information."""
-        if not g16_claisen_ts.exists():
-            pytest.skip("Gaussian TS test file not found")
 
         shutil.copy(g16_claisen_ts, temp_workdir)
         local_file = temp_workdir / g16_claisen_ts.name
@@ -1070,8 +961,6 @@ class TestPrintOutput:
 
     def test_main_prints_freq_value_info(self, g16_claisen_ts, temp_workdir, monkeypatch, capsys):
         """Test main prints info when using --freq option."""
-        if not g16_claisen_ts.exists():
-            pytest.skip("Gaussian TS test file not found")
 
         import cclib
 
@@ -1090,8 +979,6 @@ class TestPrintOutput:
 
     def test_main_prints_freqnum_info(self, g16_claisen_ts, temp_workdir, monkeypatch, capsys):
         """Test main prints info when using --freqnum option."""
-        if not g16_claisen_ts.exists():
-            pytest.skip("Gaussian TS test file not found")
 
         shutil.copy(g16_claisen_ts, temp_workdir)
         local_file = temp_workdir / g16_claisen_ts.name
@@ -1171,8 +1058,6 @@ class TestQRCParseError:
 
     def test_main_handles_parse_exception(self, g16_claisen_ts, tmp_path, monkeypatch, capsys):
         """Test main() catches QRCParseError from QRCGenerator and returns 1."""
-        if not g16_claisen_ts.exists():
-            pytest.skip("Gaussian TS test file not found")
 
         shutil.copy(g16_claisen_ts, tmp_path)
         local_file = tmp_path / g16_claisen_ts.name
@@ -1195,8 +1080,6 @@ class TestMainAutoMode:
         """Test --auto mode skips files with no imaginary frequencies."""
         # planar_chex_mode1.log has 0 imaginary frequencies (it's an optimized structure)
         mode1_file = Path(__file__).parent.parent / 'examples' / 'g16' / 'planar_chex_mode1.log'
-        if not mode1_file.exists():
-            pytest.skip("planar_chex_mode1.log not found")
 
         shutil.copy(mode1_file, temp_workdir)
         local_file = temp_workdir / mode1_file.name
@@ -1214,8 +1097,6 @@ class TestMainExitCodes:
 
     def test_success_returns_zero(self, g16_acetaldehyde, temp_workdir, monkeypatch):
         """Test main() returns 0 on success."""
-        if not g16_acetaldehyde.exists():
-            pytest.skip("Gaussian test file not found")
 
         shutil.copy(g16_acetaldehyde, temp_workdir)
         local_file = temp_workdir / g16_acetaldehyde.name
@@ -1230,8 +1111,6 @@ class TestMainExitCodes:
 
     def test_main_quiet_flag(self, g16_acetaldehyde, temp_workdir, monkeypatch):
         """Test that -q/--quiet suppresses verbose output."""
-        if not g16_acetaldehyde.exists():
-            pytest.skip("Gaussian test file not found")
 
         shutil.copy(g16_acetaldehyde, temp_workdir)
         local_file = temp_workdir / g16_acetaldehyde.name
@@ -1369,8 +1248,6 @@ class TestRunIRC:
 
     def test_run_irc_no_overlap(self, g16_claisen_ts, tmp_path, monkeypatch):
         """Test run_irc creates QRC and calls g16_opt when no overlap."""
-        if not g16_claisen_ts.exists():
-            pytest.skip("Gaussian TS test file not found")
 
         monkeypatch.chdir(tmp_path)
         shutil.copy(g16_claisen_ts, tmp_path)
@@ -1387,8 +1264,6 @@ class TestRunIRC:
 
     def test_run_irc_with_overlap(self, g16_claisen_ts, tmp_path, monkeypatch):
         """Test run_irc skips g16_opt when atoms overlap."""
-        if not g16_claisen_ts.exists():
-            pytest.skip("Gaussian TS test file not found")
 
         monkeypatch.chdir(tmp_path)
         shutil.copy(g16_claisen_ts, tmp_path)
@@ -1442,8 +1317,6 @@ class TestUnknownFormat:
 
     def test_unknown_format_defaults_to_com(self, g16_acetaldehyde, tmp_path, monkeypatch):
         """Test that unknown format falls back to .com extension."""
-        if not g16_acetaldehyde.exists():
-            pytest.skip("Gaussian test file not found")
 
         monkeypatch.chdir(tmp_path)
         shutil.copy(g16_acetaldehyde, tmp_path)
@@ -1469,8 +1342,6 @@ class TestMultiplicityFallback:
 
     def test_missing_multiplicity_defaults_to_one(self, g16_acetaldehyde, tmp_path, monkeypatch, capsys):
         """Test that missing multiplicity defaults to 1 with a warning."""
-        if not g16_acetaldehyde.exists():
-            pytest.skip("Gaussian test file not found")
 
         monkeypatch.chdir(tmp_path)
         shutil.copy(g16_acetaldehyde, tmp_path)
@@ -1516,8 +1387,6 @@ class TestFormatTypeFallback:
 
     def test_no_metadata_uses_outputdata_format(self, g16_acetaldehyde, tmp_path, monkeypatch):
         """Test that missing metadata falls back to OutputData format detection."""
-        if not g16_acetaldehyde.exists():
-            pytest.skip("Gaussian test file not found")
 
         monkeypatch.chdir(tmp_path)
         shutil.copy(g16_acetaldehyde, tmp_path)
@@ -1562,8 +1431,6 @@ class TestMainCclibException:
 
     def test_main_cclib_parse_exception(self, g16_acetaldehyde, tmp_path, monkeypatch, capsys):
         """Test main() handles cclib throwing an exception during parsing."""
-        if not g16_acetaldehyde.exists():
-            pytest.skip("Gaussian test file not found")
 
         monkeypatch.chdir(tmp_path)
         shutil.copy(g16_acetaldehyde, tmp_path)
@@ -1601,8 +1468,6 @@ class TestUnknownFormatFallback:
 
     def test_unknown_format_writes_com(self, g16_acetaldehyde, tmp_path, monkeypatch):
         """Test that an unrecognized format falls back to .com extension."""
-        if not g16_acetaldehyde.exists():
-            pytest.skip("Gaussian test file not found")
 
         monkeypatch.chdir(tmp_path)
         shutil.copy(g16_acetaldehyde, tmp_path)
@@ -1652,8 +1517,6 @@ class TestQcoordMode:
 
     def test_qcoord_creates_directories_and_runs(self, g16_claisen_ts, tmp_path, monkeypatch, capsys):
         """Test --qcoord mode creates directory structure and runs calculations."""
-        if not g16_claisen_ts.exists():
-            pytest.skip("Gaussian TS test file not found")
 
         monkeypatch.chdir(tmp_path)
         shutil.copy(g16_claisen_ts, tmp_path)
@@ -1680,8 +1543,6 @@ class TestQcoordMode:
 
     def test_qcoord_limited_modes(self, g16_claisen_ts, tmp_path, monkeypatch):
         """Test --qcoord with limited nummodes creates only specified directories."""
-        if not g16_claisen_ts.exists():
-            pytest.skip("Gaussian TS test file not found")
 
         monkeypatch.chdir(tmp_path)
         shutil.copy(g16_claisen_ts, tmp_path)
@@ -1700,8 +1561,6 @@ class TestQcoordMode:
 
     def test_qcoord_all_modes_default(self, g16_claisen_ts, tmp_path, monkeypatch):
         """Test --qcoord with default nummodes='all' covers all modes."""
-        if not g16_claisen_ts.exists():
-            pytest.skip("Gaussian TS test file not found")
 
         monkeypatch.chdir(tmp_path)
         shutil.copy(g16_claisen_ts, tmp_path)
@@ -1725,8 +1584,6 @@ class TestQcoordMode:
         """Test --qcoord with no imaginary freqs logs stability check message."""
         # Use planar_chex_mode1.log which has 0 imaginary frequencies
         mode1_file = Path(__file__).parent.parent / 'examples' / 'g16' / 'planar_chex_mode1.log'
-        if not mode1_file.exists():
-            pytest.skip("planar_chex_mode1.log not found")
 
         monkeypatch.chdir(tmp_path)
         shutil.copy(mode1_file, tmp_path)
