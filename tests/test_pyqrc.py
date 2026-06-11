@@ -607,7 +607,7 @@ class TestMain:
         main()
 
         captured = capsys.readouterr()
-        assert 'imaginary frequencies: processing' in captured.out
+        assert 'imaginary frequencies: processed' in captured.out
 
 
 class TestOutputDataExtended:
@@ -1815,6 +1815,10 @@ class TestResolveTargetModes:
     def test_freqnum_zero_raises(self):
         with pytest.raises(QRCModeError, match="out of range"):
             QRCGenerator._resolve_target_modes(self.FREQS, None, 0)
+
+    def test_empty_freq_with_val_raises(self):
+        with pytest.raises(QRCModeError, match="no vibrational modes are available"):
+            QRCGenerator._resolve_target_modes(np.array([]), -500.0, None)
 
 
 class TestMainModule:

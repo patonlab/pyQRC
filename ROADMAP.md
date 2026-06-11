@@ -27,6 +27,8 @@ unless overridden; tasks below assume them.
 | D4 | `--freq` matching semantics | **Nearest mode within ±1 cm⁻¹ (configurable), print the matched mode; no match → error, no file, exit 1.** Release as **v2.2.0** with a release note. | Frequencies are reported to ~0.1 cm⁻¹; exact float equality can never be the intended UX. Previously "successful" no-op runs becoming errors is the point of the fix. |
 | D5 | Python 3.13 support | **Yes — add 3.13 to both CI matrices and the classifiers.** | Pure-Python package; local development already happens on 3.13; risk is in cclib, which CI will reveal. |
 
+Note (D3): per the README "ORCA 6 compatibility" section, cclib 1.8.1 is incompatible with ORCA 6 parsing, so ORCA 6 support is excluded until a fixed cclib release is published.
+
 ---
 
 ## Milestone 0 — Safety Net
@@ -59,7 +61,7 @@ unless overridden; tasks below assume them.
 | # | Task | Files | Acceptance criteria | Size | Risk | Deps |
 |---|------|-------|---------------------|------|------|------|
 | 3.1 | `--qcoord` robustness (only if D1 usage evidence appears): open the RUNIRC log once per run (not per file, which truncates it); try/except around per-file work; hoist `OutputData` out of the amplitude loop | `pyqrc/pyQRC.py` | Multi-file `--qcoord` keeps one complete log; one bad file doesn't abort the batch | M | Medium | 2.2 |
-| 3.2 | Rename `BOHR_TO_ANGSTROM` → `ANGSTROM_TO_BOHR`; error out instead of writing `METHOD None`/`BASIS None` in Q-Chem inputs; delete the unused `TERMINATION` attribute or use it to warn on abnormal termination | `pyqrc/pyQRC.py` | No misnamed constant; Q-Chem path errors clearly when metadata is missing | S | Low | — |
+| 3.2 | ~~Rename `BOHR_TO_ANGSTROM` → `ANGSTROM_TO_BOHR`~~ (✅ done June 2026); error out instead of writing `METHOD None`/`BASIS None` in Q-Chem inputs; delete the unused `TERMINATION` attribute or use it to warn on abnormal termination | `pyqrc/pyQRC.py` | No misnamed constant; Q-Chem path errors clearly when metadata is missing | S | Low | — |
 | 3.3 | CI/lint tidy-up: pylint workflow on `[push, pull_request]`; add ruff to dev deps + CI **or** delete the orphan `[tool.ruff.lint]` config; add Python 3.13 to both CI matrices and classifiers (D5) | `.github/workflows/pylint.yml`, `pyproject.toml`, `.circleci/config.yml` | PRs from forks get linted; no orphan tool config; 3.13 green | S | Low | — |
 | 3.4 | Audit the README options table against `pyqrc --help` (the `-v` → `-q` fix is already done) | `README.md` | Table matches `--help` verbatim | S | None | 1.2 |
 

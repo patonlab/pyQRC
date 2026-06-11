@@ -55,7 +55,7 @@ def working_directory(path: Path) -> Generator[None, None, None]:
         os.chdir(original_dir)
 
 # Constants
-BOHR_TO_ANGSTROM = 1.88972612456506
+ANGSTROM_TO_BOHR = 1.88972612456506
 DEFAULT_AMPLITUDE = 0.2
 FREQ_MATCH_TOLERANCE = 1.0  # cm-1, for matching a user-requested --freq value
 DEFAULT_NPROC = 1
@@ -315,7 +315,7 @@ def mwdist(coords1: np.ndarray, coords2: np.ndarray, elements: list[int]) -> flo
     for n, atom in enumerate(elements):
         dist += ATOMIC_MASSES[atom] * (np.linalg.norm(coords1[n] - coords2[n])) ** 2
 
-    return BOHR_TO_ANGSTROM * dist ** 0.5
+    return ANGSTROM_TO_BOHR * dist ** 0.5
 
 
 def gen_overlap(mol_atoms: list[str], coords: np.ndarray, covfrac: float) -> np.ndarray:
@@ -547,6 +547,10 @@ class QRCGenerator:
             return {num - 1}
 
         if val is not None:
+            if nmodes == 0:
+                raise QRCModeError(
+                    f"requested frequency {val} cm-1 cannot be matched: no vibrational modes are available"
+                )
             nearest = min(range(nmodes), key=lambda mode: abs(freq[mode] - val))
             if abs(freq[nearest] - val) > FREQ_MATCH_TOLERANCE:
                 raise QRCModeError(
@@ -816,11 +820,11 @@ def main() -> int:
                     continue
 
                 if args.freq is not None:
-                    print(f'o   {file} will be distorted along {args.freq} cm-1: processing')
+                    print(f'o   {file} was distorted along {args.freq} cm-1')
                 elif args.freqnum is not None:
-                    print(f'o   {file} will be distorted along freq #{args.freqnum}: processing')
+                    print(f'o   {file} was distorted along freq #{args.freqnum}')
                 else:
-                    print(f'o   {file} has {im_freq} imaginary frequencies: processing')
+                    print(f'o   {file} had {im_freq} imaginary frequencies: processed')
 
         else:
             # Automatic calculations (single points for stability check)
