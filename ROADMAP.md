@@ -21,7 +21,7 @@ unless overridden; tasks below assume them.
 
 | # | Question | Decision (proposed) | Rationale |
 |---|----------|---------------------|-----------|
-| D1 | Keep or deprecate `--qcoord`? | **Keep, fix packaging (1.1), defer robustness work (3.1)** until there is evidence of use. | Shipping `run_g16.sh` is a one-line fix; the absence of bug reports for a long-broken mode suggests low usage, so don't invest beyond that yet. |
+| D1 | Keep or deprecate `--qcoord`? | ~~Keep, fix packaging (1.1), defer robustness work (3.1) until there is evidence of use.~~ **Resolved 2026-06: deprecate.** Maintainer confirmed no known usage; `--qcoord`/`--nummodes` warn as deprecated in v2.3.0 and will be removed in 3.0. | The mode was unrunnable from pip installs for years with zero bug reports, and it runs Gaussian sequentially on the invoking machine — the wrong model for HPC users, who submit through a scheduler. |
 | D2 | Ship `examples/` in the wheel? | **No — repo-only.** Remove the dead `package-data`/`MANIFEST.in` references; optionally include examples in the sdist only. | They are test fixtures/docs (~MBs of QM output); installed users don't need them, and conftest already resolves repo-relative paths. |
 | D3 | cclib pinning policy | **Bound now: `cclib>=1.8.1,<2`; raise the floor to the first release containing the ORCA 6 fix when it ships**, then make the ORCA 6 example a tested fixture. | Matches the compatibility matrix the README already documents; an upper bound protects against the known master-branch Q-Chem regression pattern. |
 | D4 | `--freq` matching semantics | **Nearest mode within ±1 cm⁻¹ (configurable), print the matched mode; no match → error, no file, exit 1.** Release as **v2.2.0** with a release note. | Frequencies are reported to ~0.1 cm⁻¹; exact float equality can never be the intended UX. Previously "successful" no-op runs becoming errors is the point of the fix. |
@@ -60,7 +60,7 @@ Note (D3): per the README "ORCA 6 compatibility" section, cclib 1.8.1 is incompa
 
 | # | Task | Files | Acceptance criteria | Size | Risk | Deps |
 |---|------|-------|---------------------|------|------|------|
-| 3.1 | `--qcoord` robustness (only if D1 usage evidence appears): open the RUNIRC log once per run (not per file, which truncates it); try/except around per-file work; hoist `OutputData` out of the amplitude loop | `pyqrc/pyQRC.py` | Multi-file `--qcoord` keeps one complete log; one bad file doesn't abort the batch | M | Medium | 2.2 |
+| 3.1 ✖ | ~~`--qcoord` robustness~~ Superseded by D1 resolution (2026-06): `--qcoord` is deprecated in v2.3.0 and slated for removal in 3.0, so no robustness work will be done. Removal of the mode (and `run_g16.sh`, `g16_opt`, `run_irc`) is the 3.0 task. | `pyqrc/pyQRC.py` | — | — | — | — |
 | 3.2 ✅ | ~~Rename `BOHR_TO_ANGSTROM` → `ANGSTROM_TO_BOHR`~~ (✅ done June 2026); error out instead of writing `METHOD None`/`BASIS None` in Q-Chem inputs; ~~delete~~ use `TERMINATION` to warn on abnormal Gaussian termination (it is public API per conventions) | `pyqrc/pyQRC.py` | No misnamed constant; Q-Chem path errors clearly when metadata is missing | S | Low | — |
 | 3.3 ✅ | CI/lint tidy-up: pylint workflow on `[push, pull_request]`; orphan `[tool.ruff.lint]` config deleted (pylint is the enforced linter); Python 3.13 added to both CI matrices and classifiers (D5) | `.github/workflows/pylint.yml`, `pyproject.toml`, `.circleci/config.yml` | PRs from forks get linted; no orphan tool config; 3.13 green | S | Low | — |
 | 3.4 ✅ | Audit the README options table against `pyqrc --help` (the `-v` → `-q` fix is already done) | `README.md` | Table matches `--help` verbatim | S | None | 1.2 |
@@ -79,8 +79,10 @@ parse/compute/write with a `write=False` library mode, and the suite runs
 with zero skips on release cclib. **v2.2.0 was released to PyPI on
 2026-06-11** via the Trusted Publishing workflow (wheel verified to
 contain `run_g16.sh`).
-Milestone 3 is also complete except 3.1 (`--qcoord` robustness), which
-stays deferred per D1 until there is evidence of `--qcoord` usage.
+Milestone 3 is also resolved: 3.2–3.4 are done, and 3.1 was closed
+without action when D1 was resolved to deprecate `--qcoord` (v2.3.0
+warns; the mode is removed in 3.0). The roadmap is complete; the only
+follow-up is releasing v2.3.0 and, eventually, the 3.0 removal.
 
 ## Releasing
 

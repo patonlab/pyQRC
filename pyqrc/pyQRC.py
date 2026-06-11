@@ -782,14 +782,21 @@ def main() -> int:
     )
     parser.add_argument(
         "--qcoord", dest="qcoord", action="store_true", default=False,
-        help="request automatic single point calculation along a particular normal mode"
+        help="(deprecated, removal in 3.0) run single points along normal modes with g16"
     )
     parser.add_argument(
         "--nummodes", dest="nummodes", type=str, default='all',
-        metavar="NUMMODES", help="number of modes for automatic single point calculation"
+        metavar="NUMMODES", help="(deprecated, removal in 3.0) number of modes for --qcoord"
     )
 
     args = parser.parse_args()
+
+    if args.qcoord:
+        print(
+            'Warning - --qcoord is deprecated and will be removed in pyQRC 3.0: '
+            'generate displaced inputs with the default mode and submit them '
+            'through your scheduler instead'
+        )
 
     # Collect input files, expanding any glob patterns the shell left unexpanded
     files = []

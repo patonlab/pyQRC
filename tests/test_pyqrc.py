@@ -1541,6 +1541,21 @@ class TestQcoordMode:
 
         assert exit_code == 0
 
+        # Deprecated mode warns once
+        assert '--qcoord is deprecated' in capsys.readouterr().out
+
+    def test_default_mode_no_deprecation_warning(
+        self, g16_claisen_ts, tmp_path, monkeypatch, capsys
+    ):
+        """The default (non --qcoord) mode prints no deprecation warning."""
+        monkeypatch.chdir(tmp_path)
+        shutil.copy(g16_claisen_ts, tmp_path)
+        local_file = tmp_path / g16_claisen_ts.name
+
+        monkeypatch.setattr('sys.argv', ['pyqrc', str(local_file)])
+        assert main() == 0
+        assert 'deprecated' not in capsys.readouterr().out
+
     def test_qcoord_limited_modes(self, g16_claisen_ts, tmp_path, monkeypatch):
         """Test --qcoord with limited nummodes creates only specified directories."""
 

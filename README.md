@@ -81,8 +81,8 @@ python -m pyqrc [options] <output_file(s)>
 | `--name SUFFIX` | String appended to the filename for new input file(s). | `QRC` |
 | `-f, --freq FREQ` | Displace along the normal mode nearest this frequency (cm⁻¹); errors if no mode is within 1 cm⁻¹. | All imaginary |
 | `--freqnum FREQNUM` | Displace along frequency number N (from lowest); errors if N exceeds the number of modes. | All imaginary |
-| `--qcoord` | Automatic single point calculations along normal modes. | Disabled |
-| `--nummodes NUMMODES` | Number of modes for `--qcoord` calculations. | `all` |
+| `--qcoord` | **Deprecated, removal in 3.0.** Runs Gaussian single points along normal modes directly on the local machine (requires `g16` on `PATH`). Generate inputs with the default mode and submit them through your scheduler instead. | Disabled |
+| `--nummodes NUMMODES` | **Deprecated, removal in 3.0.** Number of modes for `--qcoord` calculations. | `all` |
 
 ## Output Files
 
