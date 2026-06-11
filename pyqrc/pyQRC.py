@@ -10,7 +10,7 @@ Based on: Goodman, J. M.; Silva, M. A. Tet. Lett. 2003, 44, 8233-8236;
           Tet. Lett. 2005, 46, 2067-2069.
 """
 
-__version__ = '2.2.0'
+__version__ = '2.3.0'
 __author__ = 'Robert Paton'
 __email__ = 'robert.paton@colostate.edu'
 
@@ -487,9 +487,38 @@ class QRCGenerator:
         return self.NEW_CARTESIAN
 
     def write_files(self) -> None:
-        """Write the verbose .qrc summary (if verbose) and the new input file."""
+        """Write the verbose .qrc summary (if verbose) and the new input file.
+
+        Raises:
+            QRCParseError: If a Q-Chem input is requested but the method or
+                basis set could not be parsed from the output. Raised before
+                any file is written.
+        """
         file_path = Path(self.file)
         nat = self.NATOMS
+
+        # Resolve output format and route, preferring cclib metadata
+        format_type = self._format_type
+        route = self.route
+        if format_type is None or route is None:
+            gdata = OutputData(self.file)
+            if format_type is None:
+                format_type = gdata.format
+            if route is None:
+                route = gdata.JOBTYPE
+            if gdata.format == "Gaussian" and gdata.TERMINATION != "normal":
+                print(
+                    f'Warning - {self.file} did not terminate normally: '
+                    'the parsed geometry and normal modes may be incomplete'
+                )
+
+        if format_type == "QChem" and (self._func is None or self._basis is None):
+            raise QRCParseError(
+                f"Cannot write a Q-Chem input for '{self.file}': the method "
+                "and/or basis set could not be parsed from the output, so the "
+                "input would contain 'METHOD None'. Check that the output file "
+                "is complete."
+            )
 
         if self.verbose:
             with Logger(file_path.stem, "qrc", self.suffix) as log:
@@ -510,16 +539,6 @@ class QRCGenerator:
                             f'{self.DISPS[mode][atom][2]:9.6f}'
                         )
                 log.write(f'\n   STRUCTURE MOVED BY {self.MW_DISTANCE:.3f} Bohr amu^1/2 \n')
-
-        # Resolve output format and route, preferring cclib metadata
-        format_type = self._format_type
-        route = self.route
-        if format_type is None or route is None:
-            gdata = OutputData(self.file)
-            if format_type is None:
-                format_type = gdata.format
-            if route is None:
-                route = gdata.JOBTYPE
 
         self._write_input_file(
             file_path, format_type, self.suffix, self.nproc, self.mem, route,
@@ -763,14 +782,21 @@ def main() -> int:
     )
     parser.add_argument(
         "--qcoord", dest="qcoord", action="store_true", default=False,
-        help="request automatic single point calculation along a particular normal mode"
+        help="(deprecated, removal in 3.0) run single points along normal modes with g16"
     )
     parser.add_argument(
         "--nummodes", dest="nummodes", type=str, default='all',
-        metavar="NUMMODES", help="number of modes for automatic single point calculation"
+        metavar="NUMMODES", help="(deprecated, removal in 3.0) number of modes for --qcoord"
     )
 
     args = parser.parse_args()
+
+    if args.qcoord:
+        print(
+            'Warning - --qcoord is deprecated and will be removed in pyQRC 3.0: '
+            'generate displaced inputs with the default mode and submit them '
+            'through your scheduler instead'
+        )
 
     # Collect input files, expanding any glob patterns the shell left unexpanded
     files = []
