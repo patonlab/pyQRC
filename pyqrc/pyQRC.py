@@ -487,9 +487,38 @@ class QRCGenerator:
         return self.NEW_CARTESIAN
 
     def write_files(self) -> None:
-        """Write the verbose .qrc summary (if verbose) and the new input file."""
+        """Write the verbose .qrc summary (if verbose) and the new input file.
+
+        Raises:
+            QRCParseError: If a Q-Chem input is requested but the method or
+                basis set could not be parsed from the output. Raised before
+                any file is written.
+        """
         file_path = Path(self.file)
         nat = self.NATOMS
+
+        # Resolve output format and route, preferring cclib metadata
+        format_type = self._format_type
+        route = self.route
+        if format_type is None or route is None:
+            gdata = OutputData(self.file)
+            if format_type is None:
+                format_type = gdata.format
+            if route is None:
+                route = gdata.JOBTYPE
+            if gdata.format == "Gaussian" and gdata.TERMINATION != "normal":
+                print(
+                    f'Warning - {self.file} did not terminate normally: '
+                    'the parsed geometry and normal modes may be incomplete'
+                )
+
+        if format_type == "QChem" and (self._func is None or self._basis is None):
+            raise QRCParseError(
+                f"Cannot write a Q-Chem input for '{self.file}': the method "
+                "and/or basis set could not be parsed from the output, so the "
+                "input would contain 'METHOD None'. Check that the output file "
+                "is complete."
+            )
 
         if self.verbose:
             with Logger(file_path.stem, "qrc", self.suffix) as log:
@@ -510,16 +539,6 @@ class QRCGenerator:
                             f'{self.DISPS[mode][atom][2]:9.6f}'
                         )
                 log.write(f'\n   STRUCTURE MOVED BY {self.MW_DISTANCE:.3f} Bohr amu^1/2 \n')
-
-        # Resolve output format and route, preferring cclib metadata
-        format_type = self._format_type
-        route = self.route
-        if format_type is None or route is None:
-            gdata = OutputData(self.file)
-            if format_type is None:
-                format_type = gdata.format
-            if route is None:
-                route = gdata.JOBTYPE
 
         self._write_input_file(
             file_path, format_type, self.suffix, self.nproc, self.mem, route,

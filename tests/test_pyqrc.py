@@ -1712,6 +1712,115 @@ class TestComputeOnly:
         assert not np.array_equal(qrc.NEW_CARTESIAN, qrc.CARTESIAN)
 
 
+class TestQChemMissingMetadata:
+    """Q-Chem inputs must never be written with METHOD None/BASIS None."""
+
+    @QCHEM_DEV_CCLIB_SKIP
+    def test_missing_method_raises_before_writing(
+        self, qchem_acetaldehyde, temp_workdir
+    ):
+        """Missing functional metadata raises QRCParseError, writes nothing."""
+        shutil.copy(qchem_acetaldehyde, temp_workdir)
+        local_file = temp_workdir / qchem_acetaldehyde.name
+
+        qrc = QRCGenerator(
+            file=str(local_file),
+            amplitude=0.2,
+            nproc=1,
+            mem="4GB",
+            route=None,
+            verbose=True,
+            suffix="QRC",
+            val=None,
+            num=None,
+            write=False,
+        )
+        qrc._func = None
+
+        with pytest.raises(QRCParseError, match="METHOD None"):
+            qrc.write_files()
+
+        assert not (temp_workdir / f"{local_file.stem}_QRC.inp").exists()
+        assert not (temp_workdir / f"{local_file.stem}_QRC.qrc").exists()
+
+    @QCHEM_DEV_CCLIB_SKIP
+    def test_missing_basis_raises_before_writing(
+        self, qchem_acetaldehyde, temp_workdir
+    ):
+        """Missing basis-set metadata raises QRCParseError, writes nothing."""
+        shutil.copy(qchem_acetaldehyde, temp_workdir)
+        local_file = temp_workdir / qchem_acetaldehyde.name
+
+        qrc = QRCGenerator(
+            file=str(local_file),
+            amplitude=0.2,
+            nproc=1,
+            mem="4GB",
+            route=None,
+            verbose=True,
+            suffix="QRC",
+            val=None,
+            num=None,
+            write=False,
+        )
+        qrc._basis = None
+
+        with pytest.raises(QRCParseError, match="basis"):
+            qrc.write_files()
+
+        assert not (temp_workdir / f"{local_file.stem}_QRC.inp").exists()
+
+
+class TestAbnormalTermination:
+    """Gaussian outputs without normal termination produce a warning."""
+
+    def test_abnormal_termination_warns_but_writes(
+        self, g16_acetaldehyde, temp_workdir, capsys
+    ):
+        """Stripped 'Normal termination' line warns; input is still written."""
+        local_file = temp_workdir / g16_acetaldehyde.name
+        lines = g16_acetaldehyde.read_text().splitlines(keepends=True)
+        local_file.write_text(
+            ''.join(line for line in lines if 'Normal termination' not in line)
+        )
+
+        QRCGenerator(
+            file=str(local_file),
+            amplitude=0.2,
+            nproc=1,
+            mem="4GB",
+            route=None,
+            verbose=True,
+            suffix="QRC",
+            val=None,
+            num=None,
+        )
+
+        assert 'did not terminate normally' in capsys.readouterr().out
+        assert (temp_workdir / f"{local_file.stem}_QRC.com").exists()
+
+    def test_normal_termination_no_warning(
+        self, g16_acetaldehyde, temp_workdir, capsys
+    ):
+        """A normally terminated output produces no termination warning."""
+        shutil.copy(g16_acetaldehyde, temp_workdir)
+        local_file = temp_workdir / g16_acetaldehyde.name
+
+        QRCGenerator(
+            file=str(local_file),
+            amplitude=0.2,
+            nproc=1,
+            mem="4GB",
+            route=None,
+            verbose=True,
+            suffix="QRC",
+            val=None,
+            num=None,
+        )
+
+        assert 'did not terminate normally' not in capsys.readouterr().out
+
+
 class TestMainModule:
     """Tests for __main__.py entry point."""
 
