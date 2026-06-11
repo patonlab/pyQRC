@@ -194,8 +194,9 @@ class TestQRCGeneratorAllFiles:
                 val=None,
                 num=None
             )
-        except (IndexError, AttributeError) as e:
+        except (IndexError, AttributeError, QRCParseError) as e:
             # cclib may have parsing issues with certain output formats
+            # (e.g. Q-Chem regression in cclib master as of 2026-04; ORCA 6 needs cclib>1.8.1)
             pytest.skip(f"cclib parsing error for {example_format}: {e}")
 
         assert qrc.CARTESIAN is not None
@@ -238,8 +239,9 @@ class TestQRCGeneratorTS:
                 val=None,
                 num=None
             )
-        except (IndexError, AttributeError) as e:
+        except (IndexError, AttributeError, QRCParseError) as e:
             # cclib may have parsing issues with certain output formats
+            # (e.g. Q-Chem regression in cclib master as of 2026-04; ORCA 6 needs cclib>1.8.1)
             pytest.skip(f"cclib parsing error for {ts_format}: {e}")
 
         # Structure should have been displaced (TS has imaginary frequency)
@@ -668,7 +670,7 @@ class TestQRCGeneratorFormats:
                 val=None,
                 num=None
             )
-        except (IndexError, AttributeError) as e:
+        except (IndexError, AttributeError, QRCParseError) as e:
             pytest.skip(f"cclib parsing error: {e}")
 
         output_file = temp_workdir / f"{local_file.stem}_QRC.inp"
@@ -699,7 +701,7 @@ class TestQRCGeneratorFormats:
                 val=None,
                 num=None
             )
-        except (IndexError, AttributeError) as e:
+        except (IndexError, AttributeError, QRCParseError) as e:
             pytest.skip(f"cclib parsing error: {e}")
 
         output_file = temp_workdir / f"{local_file.stem}_QRC.inp"
@@ -727,7 +729,7 @@ class TestQRCGeneratorFormats:
                 val=None,
                 num=None
             )
-        except (IndexError, AttributeError) as e:
+        except (IndexError, AttributeError, QRCParseError) as e:
             pytest.skip(f"cclib parsing error: {e}")
 
         output_file = temp_workdir / f"{local_file.stem}_QRC_MB.inp"
@@ -755,7 +757,7 @@ class TestQRCGeneratorFormats:
                 val=None,
                 num=None
             )
-        except (IndexError, AttributeError) as e:
+        except (IndexError, AttributeError, QRCParseError) as e:
             pytest.skip(f"cclib parsing error: {e}")
 
         output_file = temp_workdir / f"{local_file.stem}_QRC.inp"
@@ -818,7 +820,7 @@ class TestQRCGeneratorCustomRoute:
                 val=None,
                 num=None
             )
-        except (IndexError, AttributeError) as e:
+        except (IndexError, AttributeError, QRCParseError) as e:
             pytest.skip(f"cclib parsing error: {e}")
 
         output_file = temp_workdir / f"{local_file.stem}_QRC_custom.inp"
@@ -1034,7 +1036,7 @@ class TestORCAMemoryEdgeCases:
                 val=None,
                 num=None
             )
-        except (IndexError, AttributeError) as e:
+        except (IndexError, AttributeError, QRCParseError) as e:
             pytest.skip(f"cclib parsing error: {e}")
 
         output_file = temp_workdir / f"{local_file.stem}_QRC_nounit.inp"
