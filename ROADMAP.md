@@ -76,7 +76,9 @@ Note (D3): per the README "ORCA 6 compatibility" section, cclib 1.8.1 is incompa
 CI-guarded, missing files and unmatched `--freq`/`--freqnum` fail loudly,
 dependencies bounded, version single-sourced, `QRCGenerator` split into
 parse/compute/write with a `write=False` library mode, and the suite runs
-with zero skips on release cclib. Version 2.2.0 needs a PyPI release.
+with zero skips on release cclib. **v2.2.0 was released to PyPI on
+2026-06-11** via the Trusted Publishing workflow (wheel verified to
+contain `run_g16.sh`).
 Remaining: 3.1 (`--qcoord` robustness, deferred per D1), 3.2 (Q-Chem
 `METHOD None` guard + unused `TERMINATION`), 3.4 (README/--help audit).
 
