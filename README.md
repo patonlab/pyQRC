@@ -107,7 +107,7 @@ pyQRC generates the following files:
 
 ## Examples
 
-The input and output files for the examples below ship in the [examples](examples/) directory. Each format subdirectory ([g16](examples/g16/), [orca5](examples/orca5/), [orca6](examples/orca6/), [qchem](examples/qchem/)) also contains a runnable Jupyter notebook (`generate_qrc_inputs.ipynb`) that walks through generating QRC inputs from those files.
+The input and output files for the examples below ship in the [examples](examples/) directory. Each format subdirectory ([g16](examples/g16/), [orca5](examples/orca5/), [orca6](examples/orca6/), [qchem](examples/qchem/), [ase_mlip](examples/ase_mlip/)) also contains a runnable Jupyter notebook (`generate_qrc_inputs.ipynb`) that walks through generating QRC inputs from those files.
 
 ### Example 1: Remove an Unwanted Imaginary Frequency
 
@@ -134,6 +134,10 @@ python -m pyqrc planar_chex.log --nproc 4 --freqnum 3 --name mode3
 ```
 
 In this example, the initial optimization located a (3rd order) saddle point - planar cyclohexane - with three imaginary frequencies. Two new inputs are created by displacing along (i) only the first (i.e., lowest) normal mode and (ii) only the third normal mode. This contrasts from the `--auto` function of pyQRC which displaces along all imaginary modes. Subsequent optimizations of these new inputs results in different minima, producing (i) chair-shaped cyclohexane and (ii) twist-boat cyclohexane. This example illustrates that displacement along particular normal modes could be used for e.g. conformational sampling.
+
+### Example 4: QRC from an ASE / MLIP Frequency Calculation
+
+When the Hessian comes from a machine-learned interatomic potential driven through [ASE](https://wiki.fysik.dtu.dk/ase/) rather than a QM package, there is no output file for pyQRC to read. The helper script [`examples/ase_mlip/ase2gaussian.py`](examples/ase_mlip/ase2gaussian.py) bridges the gap: it writes an ASE `Vibrations` result as a Gaussian-format log file that cclib parses, after which pyQRC works exactly as in the examples above. The accompanying [notebook](examples/ase_mlip/generate_qrc_inputs.ipynb) walks through the full loop with [MACE-OFF](https://github.com/ACEsuit/mace): locate the planar NH₃ inversion transition state, compute its frequencies, generate the displaced QRC input, and reoptimize it with the MLIP to reach the pyramidal minimum.
 
 ## Comparison with IRC
 
