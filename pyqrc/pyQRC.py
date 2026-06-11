@@ -10,7 +10,7 @@ Based on: Goodman, J. M.; Silva, M. A. Tet. Lett. 2003, 44, 8233-8236;
           Tet. Lett. 2005, 46, 2067-2069.
 """
 
-__version__ = '2.1.0'
+__version__ = '2.2.0'
 __author__ = 'Robert Paton'
 __email__ = 'robert.paton@colostate.edu'
 
@@ -33,6 +33,10 @@ class QRCParseError(Exception):
     """Raised when parsing a computational chemistry output file fails."""
 
 
+class QRCModeError(Exception):
+    """Raised when a requested normal mode or frequency cannot be matched."""
+
+
 @contextmanager
 def working_directory(path: Path) -> Generator[None, None, None]:
     """Context manager for changing working directory with automatic restoration.
@@ -51,8 +55,9 @@ def working_directory(path: Path) -> Generator[None, None, None]:
         os.chdir(original_dir)
 
 # Constants
-BOHR_TO_ANGSTROM = 1.88972612456506
+ANGSTROM_TO_BOHR = 1.88972612456506
 DEFAULT_AMPLITUDE = 0.2
+FREQ_MATCH_TOLERANCE = 1.0  # cm-1, for matching a user-requested --freq value
 DEFAULT_NPROC = 1
 DEFAULT_MEMORY = "4GB"
 DEFAULT_SUFFIX = "QRC"
@@ -310,7 +315,7 @@ def mwdist(coords1: np.ndarray, coords2: np.ndarray, elements: list[int]) -> flo
     for n, atom in enumerate(elements):
         dist += ATOMIC_MASSES[atom] * (np.linalg.norm(coords1[n] - coords2[n])) ** 2
 
-    return BOHR_TO_ANGSTROM * dist ** 0.5
+    return ANGSTROM_TO_BOHR * dist ** 0.5
 
 
 def gen_overlap(mol_atoms: list[str], coords: np.ndarray, covfrac: float) -> np.ndarray:
@@ -426,17 +431,19 @@ class QRCGenerator:
         self.CARTESIAN = cartesians.copy()
         self.ATOMTYPES = elements
 
+        # Resolve which modes to displace along before any output is written,
+        # so an unmatched request leaves no files behind
+        target_modes = self._resolve_target_modes(freq, val, num)
+
         # Write verbose output file
         log = None
         if verbose:
             log = Logger(file_path.stem, "qrc", suffix)
             self._write_header(log, elements, cartesians, nat, freq, rmass, fconst, nmodes)
 
-        # Note: Original coordinates are stored in self.CARTESIAN
-
         # Calculate shifts based on user input
         shift = self._calculate_shifts(
-            freq, amplitude, val, num, verbose, log, elements, disps, nat
+            freq, amplitude, target_modes, verbose, log, elements, disps, nat
         )
 
         # Apply displacements to generate perturbed structure
@@ -510,12 +517,55 @@ class QRCGenerator:
         for mode in range(nmodes):
             log.write(f'{freq[mode]:24.4f} {rmass[mode]:9.4f} {fconst[mode]:9.4f}')
 
+    @staticmethod
+    def _resolve_target_modes(
+        freq: np.ndarray,
+        val: Optional[float],
+        num: Optional[int]
+    ) -> set:
+        """Resolve which normal modes to displace along.
+
+        Args:
+            freq: Vibrational frequencies (cm^-1).
+            val: Specific frequency value (cm^-1) requested by the user, if any.
+            num: Specific mode number (1-indexed) requested by the user, if any.
+
+        Returns:
+            Set of 0-indexed mode numbers to shift. Defaults to all
+            imaginary modes when no specific mode was requested.
+
+        Raises:
+            QRCModeError: If a specifically requested mode cannot be matched.
+        """
+        nmodes = len(freq)
+
+        if num is not None:
+            if not 1 <= num <= nmodes:
+                raise QRCModeError(
+                    f"requested mode {num} is out of range: file has {nmodes} normal modes"
+                )
+            return {num - 1}
+
+        if val is not None:
+            if nmodes == 0:
+                raise QRCModeError(
+                    f"requested frequency {val} cm-1 cannot be matched: no vibrational modes are available"
+                )
+            nearest = min(range(nmodes), key=lambda mode: abs(freq[mode] - val))
+            if abs(freq[nearest] - val) > FREQ_MATCH_TOLERANCE:
+                raise QRCModeError(
+                    f"no normal mode within {FREQ_MATCH_TOLERANCE} cm-1 of {val} cm-1 "
+                    f"(nearest: {freq[nearest]:.4f} cm-1)"
+                )
+            return {nearest}
+
+        return {mode for mode, wn in enumerate(freq) if wn < 0.0}
+
     def _calculate_shifts(
         self,
         freq: np.ndarray,
         amplitude: float,
-        val: Optional[float],
-        num: Optional[int],
+        target_modes: set,
         verbose: bool,
         log: Optional[Logger],
         elements: list[str],
@@ -526,14 +576,7 @@ class QRCGenerator:
         shift = []
 
         for mode, wn in enumerate(freq):
-            # Move along imaginary freqs, or a specific mode requested by user
-            should_shift = (
-                (wn < 0.0 and val is None and num is None) or
-                (wn == val) or
-                (mode + 1 == num)
-            )
-
-            if should_shift:
+            if mode in target_modes:
                 shift.append(amplitude)
                 if verbose and log:
                     log.write('\n                -SHIFTING ALONG NORMAL MODE-')
@@ -727,17 +770,21 @@ def main() -> int:
 
     args = parser.parse_args()
 
-    # Collect input files
+    # Collect input files, expanding any glob patterns the shell left unexpanded
     files = []
-    for elem in sys.argv[1:]:
-        try:
-            if os.path.splitext(elem)[1] in [".out", ".log"]:
-                for file in glob(elem):
-                    files.append(file)
-        except IndexError:
-            pass
-
     exit_code = 0
+    for pattern in args.files:
+        matches = sorted(glob(pattern))
+        if not matches:
+            print(f'x   {pattern}: no such file')
+            exit_code = 1
+            continue
+        for file in matches:
+            if os.path.splitext(file)[1] not in ('.out', '.log'):
+                print(f'x   {file} skipped: expected a .log or .out file')
+                exit_code = 1
+                continue
+            files.append(file)
     for file in files:
         # Parse output with cclib and count imaginary frequencies
         try:
@@ -762,21 +809,22 @@ def main() -> int:
             if im_freq == 0 and args.auto:
                 print(f'x   {file} has no imaginary frequencies: skipping')
             else:
-                if args.freq is None and args.freqnum is None:
-                    print(f'o   {file} has {im_freq} imaginary frequencies: processing')
-                elif args.freq is not None:
-                    print(f'o   {file} will be distorted along {args.freq} cm-1: processing')
-                elif args.freqnum is not None:
-                    print(f'o   {file} will be distorted along freq #{args.freqnum}: processing')
-
                 try:
                     QRCGenerator(
                         file, args.amplitude, args.nproc, args.mem, args.route,
                         args.verbose, args.suffix, args.freq, args.freqnum
                     )
-                except QRCParseError as exc:
+                except (QRCParseError, QRCModeError) as exc:
                     print(f'x   {file} failed: {exc}')
                     exit_code = 1
+                    continue
+
+                if args.freq is not None:
+                    print(f'o   {file} was distorted along {args.freq} cm-1')
+                elif args.freqnum is not None:
+                    print(f'o   {file} was distorted along freq #{args.freqnum}')
+                else:
+                    print(f'o   {file} had {im_freq} imaginary frequencies: processed')
 
         else:
             # Automatic calculations (single points for stability check)

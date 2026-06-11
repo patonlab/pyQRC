@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyqrc"
-version = "2.1.0"
+version = "2.2.0"
 description = "A Python program to project computed structures along normal modes for Quick Reaction Coordinate calculations"
 readme = "README.md"
 license = {text = "MIT"}
@@ -64,7 +64,7 @@ packages = ["pyqrc"]
 include-package-data = true
 
 [tool.setuptools.package-data]
-pyqrc = ["examples/*"]
+pyqrc = ["run_g16.sh"]
 
 [tool.pylint.main]
 py-version = "3.9"

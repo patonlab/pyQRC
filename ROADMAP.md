@@ -27,23 +27,25 @@ unless overridden; tasks below assume them.
 | D4 | `--freq` matching semantics | **Nearest mode within ±1 cm⁻¹ (configurable), print the matched mode; no match → error, no file, exit 1.** Release as **v2.2.0** with a release note. | Frequencies are reported to ~0.1 cm⁻¹; exact float equality can never be the intended UX. Previously "successful" no-op runs becoming errors is the point of the fix. |
 | D5 | Python 3.13 support | **Yes — add 3.13 to both CI matrices and the classifiers.** | Pure-Python package; local development already happens on 3.13; risk is in cclib, which CI will reveal. |
 
+Note (D3): per the README "ORCA 6 compatibility" section, cclib 1.8.1 is incompatible with ORCA 6 parsing, so ORCA 6 support is excluded until a fixed cclib release is published.
+
 ---
 
 ## Milestone 0 — Safety Net
 
 | # | Task | Files | Acceptance criteria | Size | Risk | Deps |
 |---|------|-------|---------------------|------|------|------|
-| 0.1 | Commit pending working-tree changes (README ORCA-6 section, test except-clauses; track `examples/orca6/full_alkyne_TS.out`) | `README.md`, `tests/test_pyqrc.py`, `examples/orca6/` | `git status` clean; CI green | S | None | — |
-| 0.2 | Add wheel-build + clean-venv install + smoke test to CircleCI: build wheel, assert it contains `pyqrc/run_g16.sh`, `pip install` it in a fresh venv, run `pyqrc` on `examples/g16/acetaldehyde.log` in a tmpdir, assert `acetaldehyde_QRC.com` is created | `.circleci/config.yml` | Job exists and **fails on current master** (proving it catches the packaging bug) | S | None | — |
-| 0.3 | Characterization tests for desired CLI failure modes, marked `xfail(strict=True)`: missing file → exit 1 + message; unmatched `--freq` → exit 1, no file written; out-of-range `--freqnum` → exit 1, no file written | `tests/test_pyqrc.py` | Tests xfail today; flip to pass with 1.2/1.3 | S | None | — |
+| 0.1 ✅ | Commit pending working-tree changes (README ORCA-6 section, test except-clauses; track `examples/orca6/full_alkyne_TS.out`) | `README.md`, `tests/test_pyqrc.py`, `examples/orca6/` | `git status` clean; CI green | S | None | — |
+| 0.2 ✅ | Add wheel-build + clean-venv install + smoke test to CircleCI: build wheel, assert it contains `pyqrc/run_g16.sh`, `pip install` it in a fresh venv, run `pyqrc` on `examples/g16/acetaldehyde.log` in a tmpdir, assert `acetaldehyde_QRC.com` is created | `.circleci/config.yml` | Job exists and **fails on current master** (proving it catches the packaging bug) | S | None | — |
+| 0.3 ✅ | Characterization tests for desired CLI failure modes, marked `xfail(strict=True)`: missing file → exit 1 + message; unmatched `--freq` → exit 1, no file written; out-of-range `--freqnum` → exit 1, no file written | `tests/test_pyqrc.py` | Tests xfail today; flip to pass with 1.2/1.3 | S | None | — |
 
 ## Milestone 1 — Critical Fixes
 
 | # | Task | Files | Acceptance criteria | Size | Risk | Deps |
 |---|------|-------|---------------------|------|------|------|
-| 1.1 | **Fix packaging** per D1/D2: add `pyqrc = ["run_g16.sh"]` to `[tool.setuptools.package-data]`; delete the dead `recursive-include pyqrc/examples *` from `MANIFEST.in` (add root `examples/` to the sdist only if desired) | `pyproject.toml`, `MANIFEST.in` | 0.2's CI job passes; `unzip -l` of the wheel shows `pyqrc/run_g16.sh` | S | Low | 0.2 |
-| 1.2 | **Fix `--freq`/`--freqnum` matching** per D4: nearest-match within tolerance computed once before the shift loop; if the user requested a specific mode and nothing matched, raise (new `QRCModeError` or `QRCParseError` subclass) **before any file is written**; move `main()`'s "processing" message after successful generation. Bump version to 2.2.0 | `pyqrc/pyQRC.py` (`_calculate_shifts`, `QRCGenerator.__init__`, `main`), `tests/test_pyqrc.py` | 0.3 xfails flip to pass; `--freq -500` vs actual −500.123 displaces along that mode and says so; `--freqnum 99` errors with no file. Update the two tests that assert the old no-op behavior (`-f -500` cases) | M | **Medium — behavior change; needs release note** | 0.3 |
-| 1.3 | **Collect files from `args.files`**, not a `sys.argv` re-scan: glob each entry (literal existing paths glob to themselves); no match → `x   <entry>: no such file`, exit code 1; warn-and-skip unexpected extensions; remove the dead `except IndexError` | `pyqrc/pyQRC.py` (`main`) | `pyqrc typo.log` exits 1 with a message; `--name backup.log` no longer captures the option value as an input | S | Low | 0.3 |
+| 1.1 ✅ | **Fix packaging** per D1/D2: add `pyqrc = ["run_g16.sh"]` to `[tool.setuptools.package-data]`; delete the dead `recursive-include pyqrc/examples *` from `MANIFEST.in` (add root `examples/` to the sdist only if desired) | `pyproject.toml`, `MANIFEST.in` | 0.2's CI job passes; `unzip -l` of the wheel shows `pyqrc/run_g16.sh` | S | Low | 0.2 |
+| 1.2 ✅ | **Fix `--freq`/`--freqnum` matching** per D4: nearest-match within tolerance computed once before the shift loop; if the user requested a specific mode and nothing matched, raise (new `QRCModeError` or `QRCParseError` subclass) **before any file is written**; move `main()`'s "processing" message after successful generation. Bump version to 2.2.0 | `pyqrc/pyQRC.py` (`_calculate_shifts`, `QRCGenerator.__init__`, `main`), `tests/test_pyqrc.py` | 0.3 xfails flip to pass; `--freq -500` vs actual −500.123 displaces along that mode and says so; `--freqnum 99` errors with no file. Update the two tests that assert the old no-op behavior (`-f -500` cases) | M | **Medium — behavior change; needs release note** | 0.3 |
+| 1.3 ✅ | **Collect files from `args.files`**, not a `sys.argv` re-scan: glob each entry (literal existing paths glob to themselves); no match → `x   <entry>: no such file`, exit code 1; warn-and-skip unexpected extensions; remove the dead `except IndexError` | `pyqrc/pyQRC.py` (`main`) | `pyqrc typo.log` exits 1 with a message; `--name backup.log` no longer captures the option value as an input | S | Low | 0.3 |
 
 ## Milestone 2 — High-Leverage Improvements
 
@@ -59,13 +61,27 @@ unless overridden; tasks below assume them.
 | # | Task | Files | Acceptance criteria | Size | Risk | Deps |
 |---|------|-------|---------------------|------|------|------|
 | 3.1 | `--qcoord` robustness (only if D1 usage evidence appears): open the RUNIRC log once per run (not per file, which truncates it); try/except around per-file work; hoist `OutputData` out of the amplitude loop | `pyqrc/pyQRC.py` | Multi-file `--qcoord` keeps one complete log; one bad file doesn't abort the batch | M | Medium | 2.2 |
-| 3.2 | Rename `BOHR_TO_ANGSTROM` → `ANGSTROM_TO_BOHR`; error out instead of writing `METHOD None`/`BASIS None` in Q-Chem inputs; delete the unused `TERMINATION` attribute or use it to warn on abnormal termination | `pyqrc/pyQRC.py` | No misnamed constant; Q-Chem path errors clearly when metadata is missing | S | Low | — |
+| 3.2 | ~~Rename `BOHR_TO_ANGSTROM` → `ANGSTROM_TO_BOHR`~~ (✅ done June 2026); error out instead of writing `METHOD None`/`BASIS None` in Q-Chem inputs; delete the unused `TERMINATION` attribute or use it to warn on abnormal termination | `pyqrc/pyQRC.py` | No misnamed constant; Q-Chem path errors clearly when metadata is missing | S | Low | — |
 | 3.3 | CI/lint tidy-up: pylint workflow on `[push, pull_request]`; add ruff to dev deps + CI **or** delete the orphan `[tool.ruff.lint]` config; add Python 3.13 to both CI matrices and classifiers (D5) | `.github/workflows/pylint.yml`, `pyproject.toml`, `.circleci/config.yml` | PRs from forks get linted; no orphan tool config; 3.13 green | S | Low | — |
 | 3.4 | Audit the README options table against `pyqrc --help` (the `-v` → `-q` fix is already done) | `README.md` | Table matches `--help` verbatim | S | None | 1.2 |
 
 ## Quick wins (all S, can be done immediately)
 
 1. ~~Fix the phantom `-v` row in the README options table~~ ✅ done June 2026
-2. Commit pending working-tree changes (0.1)
-3. Wheel-content CI check (0.2)
-4. Pylint on `pull_request` (part of 3.3)
+2. ~~Commit pending working-tree changes (0.1)~~ ✅ done June 2026
+3. ~~Wheel-content CI check (0.2)~~ ✅ done June 2026
+4. ~~Pylint on `pull_request` (part of 3.3)~~ ✅ done June 2026
+
+**Milestones 0 and 1 are complete** (June 2026): packaging fixed and CI-guarded,
+missing files and unmatched `--freq`/`--freqnum` now fail loudly, version bumped
+to 2.2.0 (needs a PyPI release). Next up: Milestone 2.
+
+## Releasing
+
+Publishing is automated via PyPI Trusted Publishing
+(`.github/workflows/publish.yml`): create a GitHub Release with tag
+`v<version>` (matching `pyproject.toml`) and the workflow builds, verifies
+wheel contents and the tag/version match, and uploads to PyPI.
+One-time setup required on pypi.org → project `pyqrc` → Publishing →
+add trusted publisher (owner `patonlab`, repo `pyQRC`, workflow
+`publish.yml`, environment `pypi`).
