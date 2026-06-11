@@ -107,6 +107,8 @@ pyQRC generates the following files:
 
 ## Examples
 
+The input and output files for the examples below ship in the [examples](examples/) directory. Each format subdirectory ([g16](examples/g16/), [orca5](examples/orca5/), [orca6](examples/orca6/), [qchem](examples/qchem/)) also contains a runnable Jupyter notebook (`generate_qrc_inputs.ipynb`) that walks through generating QRC inputs from those files.
+
 ### Example 1: Remove an Unwanted Imaginary Frequency
 
 ```bash
