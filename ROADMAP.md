@@ -73,3 +73,13 @@ unless overridden; tasks below assume them.
 **Milestones 0 and 1 are complete** (June 2026): packaging fixed and CI-guarded,
 missing files and unmatched `--freq`/`--freqnum` now fail loudly, version bumped
 to 2.2.0 (needs a PyPI release). Next up: Milestone 2.
+
+## Releasing
+
+Publishing is automated via PyPI Trusted Publishing
+(`.github/workflows/publish.yml`): create a GitHub Release with tag
+`v<version>` (matching `pyproject.toml`) and the workflow builds, verifies
+wheel contents and the tag/version match, and uploads to PyPI.
+One-time setup required on pypi.org → project `pyqrc` → Publishing →
+add trusted publisher (owner `patonlab`, repo `pyQRC`, workflow
+`publish.yml`, environment `pypi`).
