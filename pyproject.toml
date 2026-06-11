@@ -78,6 +78,7 @@ disable = [
     "missing-function-docstring",
     "invalid-name",
     "too-many-arguments",
+    "too-many-instance-attributes",
     "too-many-positional-arguments",
     "too-many-locals",
     "too-many-branches",

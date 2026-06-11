@@ -375,7 +375,8 @@ class QRCGenerator:
         verbose: bool,
         suffix: str,
         val: Optional[float],
-        num: Optional[int]
+        num: Optional[int],
+        write: bool = True
     ):
         """Initialize QRC generator and create displaced structure.
 
@@ -389,13 +390,36 @@ class QRCGenerator:
             suffix: Suffix to append to output filename.
             val: Specific frequency value (cm^-1) to displace along.
             num: Specific mode number to displace along (1-indexed).
+            write: Whether to write output files (False to only compute
+                the displaced geometry, e.g. for library use).
         """
-        # Parse computational chemistry output with cclib
+        self.file = file
+        self.amplitude = amplitude
+        self.nproc = nproc
+        self.mem = mem
+        self.route = route
+        self.verbose = verbose
+        self.suffix = suffix
+        self.val = val
+        self.num = num
+
+        self._parse()
+        self.compute_displacement()
+        if write:
+            self.write_files()
+
+    def _parse(self) -> None:
+        """Parse the output file with cclib and store molecular data.
+
+        Raises:
+            QRCParseError: If the file format cannot be determined or
+                parsing fails.
+        """
         try:
-            parser = cclib.io.ccopen(file)
+            parser = cclib.io.ccopen(self.file)
             if parser is None:
                 raise QRCParseError(
-                    f"Could not determine file format for '{file}'. "
+                    f"Could not determine file format for '{self.file}'. "
                     "Ensure it is a valid Gaussian, ORCA, or Q-Chem output file."
                 )
             data = parser.parse()
@@ -403,90 +427,105 @@ class QRCGenerator:
             if isinstance(exc, QRCParseError):
                 raise
             raise QRCParseError(
-                f"Failed to parse '{file}': {exc}. "
+                f"Failed to parse '{self.file}': {exc}. "
                 "The file may be corrupted or from an unsupported format."
             ) from exc
 
-        file_path = Path(file)
-
-        nat = data.natom
-        charge = data.charge
-        atomnos = data.atomnos
+        self.NATOMS = data.natom
+        self.CHARGE = data.charge
+        self.ATOMNOS = data.atomnos
 
         try:
-            mult = data.mult
+            self.MULT = data.mult
         except AttributeError:
-            mult = 1
+            self.MULT = 1
             print('Warning - multiplicity not parsed from input: defaulted to 1 in input files')
 
-        elements = [PERIODIC_TABLE[z] for z in atomnos]
-        cartesians = data.atomcoords[-1]
-        freq = data.vibfreqs
-        disps = data.vibdisps
-        nmodes = len(freq)
+        self.ATOMTYPES = [PERIODIC_TABLE[z] for z in self.ATOMNOS]
+        self.CARTESIAN = data.atomcoords[-1].copy()
+        self.FREQS = data.vibfreqs
+        self.DISPS = data.vibdisps
 
-        rmass = data.vibrmasses if hasattr(data, 'vibrmasses') else [0.0] * nmodes
-        fconst = data.vibfconsts if hasattr(data, 'vibfconsts') else [0.0] * nmodes
+        nmodes = len(self.FREQS)
+        self.RMASS = data.vibrmasses if hasattr(data, 'vibrmasses') else [0.0] * nmodes
+        self.FCONST = data.vibfconsts if hasattr(data, 'vibfconsts') else [0.0] * nmodes
 
-        self.CARTESIAN = cartesians.copy()
-        self.ATOMTYPES = elements
-
-        # Resolve which modes to displace along before any output is written,
-        # so an unmatched request leaves no files behind
-        target_modes = self._resolve_target_modes(freq, val, num)
-
-        # Write verbose output file
-        log = None
-        if verbose:
-            log = Logger(file_path.stem, "qrc", suffix)
-            self._write_header(log, elements, cartesians, nat, freq, rmass, fconst, nmodes)
-
-        # Calculate shifts based on user input
-        shift = self._calculate_shifts(
-            freq, amplitude, target_modes, verbose, log, elements, disps, nat
-        )
-
-        # Apply displacements to generate perturbed structure
-        for mode in range(nmodes):
-            for atom in range(nat):
-                for coord in range(3):
-                    cartesians[atom][coord] += disps[mode][atom][coord] * shift[mode]
-
-        self.NEW_CARTESIAN = cartesians
-
-        # Record structure displacement
-        mw_distance = mwdist(self.NEW_CARTESIAN, self.CARTESIAN, atomnos)
-        if verbose and log:
-            log.write(f'\n   STRUCTURE MOVED BY {mw_distance:.3f} Bohr amu^1/2 \n')
-
-        # Get output format and job specification
-        format_type = None
-        func = None
-        basis = None
-
+        # Output format and job metadata from cclib, when available
+        self._format_type = None
+        self._func = None
+        self._basis = None
         if hasattr(data, 'metadata'):
-            format_type = data.metadata.get('package')
-            func = data.metadata.get('functional')
-            basis = data.metadata.get('basis_set')
+            self._format_type = data.metadata.get('package')
+            self._func = data.metadata.get('functional')
+            self._basis = data.metadata.get('basis_set')
 
-        gdata = OutputData(file)
+    def compute_displacement(self) -> np.ndarray:
+        """Compute the displaced geometry along the resolved normal modes.
 
-        if format_type is None:
-            format_type = gdata.format
-        if route is None:
-            route = gdata.JOBTYPE
+        Pure computation: parsed data is never mutated and no files are
+        written. Results are stored on the instance (NEW_CARTESIAN,
+        MW_DISTANCE, OVERLAPPED).
 
-        # Create new input file
-        self._write_input_file(
-            file_path, format_type, suffix, nproc, mem, route, charge, mult,
-            elements, cartesians, nat, func, basis
-        )
+        Returns:
+            The displaced coordinates (N x 3 array).
 
-        # Check for atomic overlaps
+        Raises:
+            QRCModeError: If a specifically requested mode cannot be matched.
+        """
+        nmodes = len(self.FREQS)
+        self._target_modes = self._resolve_target_modes(self.FREQS, self.val, self.num)
+
+        new_cartesian = self.CARTESIAN.copy()
+        for mode in self._target_modes:
+            for atom in range(self.NATOMS):
+                for coord in range(3):
+                    new_cartesian[atom][coord] += self.DISPS[mode][atom][coord] * self.amplitude
+
+        self.NEW_CARTESIAN = new_cartesian
+        self.MW_DISTANCE = mwdist(self.NEW_CARTESIAN, self.CARTESIAN, self.ATOMNOS)
         self.OVERLAPPED = check_overlap(self.ATOMTYPES, self.NEW_CARTESIAN)
+        return self.NEW_CARTESIAN
 
-        if verbose and log:
-            log.close()
+    def write_files(self) -> None:
+        """Write the verbose .qrc summary (if verbose) and the new input file."""
+        file_path = Path(self.file)
+        nat = self.NATOMS
+
+        if self.verbose:
+            with Logger(file_path.stem, "qrc", self.suffix) as log:
+                self._write_header(
+                    log, self.ATOMTYPES, self.CARTESIAN, nat,
+                    self.FREQS, self.RMASS, self.FCONST, len(self.FREQS)
+                )
+                for mode in sorted(self._target_modes):
+                    log.write('\n                -SHIFTING ALONG NORMAL MODE-')
+                    log.write(f'                -MODE {mode + 1}: {self.FREQS[mode]:.1f} cm-1')
+                    log.write(f'                -AMPLIFIER = {self.amplitude}')
+                    log.write(f'{"":>4} {"":>9} {"X":>9} {"Y":>9} {"Z":>9}')
+                    for atom in range(nat):
+                        log.write(
+                            f'{self.ATOMTYPES[atom]:>4} {"":>9} '
+                            f'{self.DISPS[mode][atom][0]:9.6f} '
+                            f'{self.DISPS[mode][atom][1]:9.6f} '
+                            f'{self.DISPS[mode][atom][2]:9.6f}'
+                        )
+                log.write(f'\n   STRUCTURE MOVED BY {self.MW_DISTANCE:.3f} Bohr amu^1/2 \n')
+
+        # Resolve output format and route, preferring cclib metadata
+        format_type = self._format_type
+        route = self.route
+        if format_type is None or route is None:
+            gdata = OutputData(self.file)
+            if format_type is None:
+                format_type = gdata.format
+            if route is None:
+                route = gdata.JOBTYPE
+
+        self._write_input_file(
+            file_path, format_type, self.suffix, self.nproc, self.mem, route,
+            self.CHARGE, self.MULT, self.ATOMTYPES, self.NEW_CARTESIAN, nat,
+            self._func, self._basis
+        )
 
     def _write_header(
         self,
@@ -561,40 +600,6 @@ class QRCGenerator:
 
         return {mode for mode, wn in enumerate(freq) if wn < 0.0}
 
-    def _calculate_shifts(
-        self,
-        freq: np.ndarray,
-        amplitude: float,
-        target_modes: set,
-        verbose: bool,
-        log: Optional[Logger],
-        elements: list[str],
-        disps: np.ndarray,
-        nat: int
-    ) -> list[float]:
-        """Calculate displacement shifts for each normal mode."""
-        shift = []
-
-        for mode, wn in enumerate(freq):
-            if mode in target_modes:
-                shift.append(amplitude)
-                if verbose and log:
-                    log.write('\n                -SHIFTING ALONG NORMAL MODE-')
-                    log.write(f'                -MODE {mode + 1}: {wn:.1f} cm-1')
-                    log.write(f'                -AMPLIFIER = {amplitude}')
-                    log.write(f'{"":>4} {"":>9} {"X":>9} {"Y":>9} {"Z":>9}')
-                    for atom in range(nat):
-                        log.write(
-                            f'{elements[atom]:>4} {"":>9} '
-                            f'{disps[mode][atom][0]:9.6f} '
-                            f'{disps[mode][atom][1]:9.6f} '
-                            f'{disps[mode][atom][2]:9.6f}'
-                        )
-            else:
-                shift.append(0.0)
-
-        return shift
-
     def _write_input_file(
         self,
         file_path: Path,
@@ -619,50 +624,47 @@ class QRCGenerator:
         else:
             input_ext = "com"
 
-        new_input = Logger(file_path.stem, input_ext, suffix)
+        with Logger(file_path.stem, input_ext, suffix) as new_input:
+            if format_type == "Gaussian":
+                new_input.write(f'%chk={file_path.stem}_{suffix}.chk')
+                new_input.write(f'%nproc={nproc}\n%mem={mem}\n#{route}')
+                new_input.write(f'\n{file_path.stem}_{suffix}\n\n{charge} {mult}')
 
-        if format_type == "Gaussian":
-            new_input.write(f'%chk={file_path.stem}_{suffix}.chk')
-            new_input.write(f'%nproc={nproc}\n%mem={mem}\n#{route}')
-            new_input.write(f'\n{file_path.stem}_{suffix}\n\n{charge} {mult}')
+            elif format_type == "ORCA":
+                # Parse memory string for ORCA
+                memory_number = re.findall(r'\d+', mem)
+                unit = re.findall(r'GB', mem)
+                if unit:
+                    mem_val = int(memory_number[0]) * 1024
+                else:
+                    mem_val = memory_number[0]
 
-        elif format_type == "ORCA":
-            # Parse memory string for ORCA
-            memory_number = re.findall(r'\d+', mem)
-            unit = re.findall(r'GB', mem)
-            if unit:
-                mem_val = int(memory_number[0]) * 1024
-            else:
-                mem_val = memory_number[0]
+                new_input.write(
+                    f'! {route}\n %pal nprocs {nproc} end\n %maxcore {mem_val}\n\n'
+                    f'# {file_path.stem}_{suffix}\n\n* xyz {charge} {mult}'
+                )
 
-            new_input.write(
-                f'! {route}\n %pal nprocs {nproc} end\n %maxcore {mem_val}\n\n'
-                f'# {file_path.stem}_{suffix}\n\n* xyz {charge} {mult}'
-            )
+            elif format_type == "QChem":
+                new_input.write(f'$molecule\n{charge} {mult}')
 
-        elif format_type == "QChem":
-            new_input.write(f'$molecule\n{charge} {mult}')
+            # Write coordinates
+            for atom in range(nat):
+                new_input.write(
+                    f'{elements[atom]:>2} {cartesians[atom][0]:12.8f} '
+                    f'{cartesians[atom][1]:12.8f} {cartesians[atom][2]:12.8f}'
+                )
 
-        # Write coordinates
-        for atom in range(nat):
-            new_input.write(
-                f'{elements[atom]:>2} {cartesians[atom][0]:12.8f} '
-                f'{cartesians[atom][1]:12.8f} {cartesians[atom][2]:12.8f}'
-            )
-
-        # Write format-specific footer
-        if format_type == "Gaussian":
-            new_input.write("")
-        elif format_type == "ORCA":
-            new_input.write("*")
-        elif format_type == "QChem":
-            new_input.write("$end\n\n$rem")
-            new_input.write(f"   JOBTYPE opt\n   METHOD {func}\n   BASIS {basis}")
-            new_input.write("$end\n\n@@@\n\n$molecule\n   read\n$end\n\n$rem")
-            new_input.write(f"   JOBTYPE freq\n   METHOD {func}\n   BASIS {basis}")
-            new_input.write("$end\n")
-
-        new_input.close()
+            # Write format-specific footer
+            if format_type == "Gaussian":
+                new_input.write("")
+            elif format_type == "ORCA":
+                new_input.write("*")
+            elif format_type == "QChem":
+                new_input.write("$end\n\n$rem")
+                new_input.write(f"   JOBTYPE opt\n   METHOD {func}\n   BASIS {basis}")
+                new_input.write("$end\n\n@@@\n\n$molecule\n   read\n$end\n\n$rem")
+                new_input.write(f"   JOBTYPE freq\n   METHOD {func}\n   BASIS {basis}")
+                new_input.write("$end\n")
 
 
 def g16_opt(comfile: str) -> None:

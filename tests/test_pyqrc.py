@@ -1821,6 +1821,40 @@ class TestResolveTargetModes:
             QRCGenerator._resolve_target_modes(np.array([]), -500.0, None)
 
 
+class TestComputeOnly:
+    """Tests for write=False library use (ROADMAP 2.2)."""
+
+    def test_compute_without_writing_files(self, g16_claisen_ts, temp_workdir):
+        """write=False computes the displaced geometry with zero files written."""
+        qrc = QRCGenerator(
+            file=str(g16_claisen_ts), amplitude=0.2, nproc=1, mem="4GB",
+            route=None, verbose=True, suffix="QRC", val=None, num=None,
+            write=False
+        )
+
+        displacement = np.linalg.norm(
+            np.array(qrc.NEW_CARTESIAN) - np.array(qrc.CARTESIAN)
+        )
+        assert displacement > 0
+        assert qrc.OVERLAPPED is not None
+        assert qrc.MW_DISTANCE > 0
+        # No files created in the working directory (even with verbose=True)
+        assert list(temp_workdir.iterdir()) == []
+
+    def test_compute_does_not_mutate_original(self, g16_claisen_ts, temp_workdir):
+        """CARTESIAN keeps the parsed geometry; displacement goes to a copy."""
+        qrc = QRCGenerator(
+            file=str(g16_claisen_ts), amplitude=0.2, nproc=1, mem="4GB",
+            route=None, verbose=False, suffix="QRC", val=None, num=None,
+            write=False
+        )
+
+        original = qrc.CARTESIAN.copy()
+        qrc.compute_displacement()
+        assert np.array_equal(qrc.CARTESIAN, original)
+        assert not np.array_equal(qrc.NEW_CARTESIAN, qrc.CARTESIAN)
+
+
 class TestMainModule:
     """Tests for __main__.py entry point."""
 
