@@ -61,9 +61,9 @@ Note (D3): per the README "ORCA 6 compatibility" section, cclib 1.8.1 is incompa
 | # | Task | Files | Acceptance criteria | Size | Risk | Deps |
 |---|------|-------|---------------------|------|------|------|
 | 3.1 | `--qcoord` robustness (only if D1 usage evidence appears): open the RUNIRC log once per run (not per file, which truncates it); try/except around per-file work; hoist `OutputData` out of the amplitude loop | `pyqrc/pyQRC.py` | Multi-file `--qcoord` keeps one complete log; one bad file doesn't abort the batch | M | Medium | 2.2 |
-| 3.2 | ~~Rename `BOHR_TO_ANGSTROM` → `ANGSTROM_TO_BOHR`~~ (✅ done June 2026); error out instead of writing `METHOD None`/`BASIS None` in Q-Chem inputs; delete the unused `TERMINATION` attribute or use it to warn on abnormal termination | `pyqrc/pyQRC.py` | No misnamed constant; Q-Chem path errors clearly when metadata is missing | S | Low | — |
+| 3.2 ✅ | ~~Rename `BOHR_TO_ANGSTROM` → `ANGSTROM_TO_BOHR`~~ (✅ done June 2026); error out instead of writing `METHOD None`/`BASIS None` in Q-Chem inputs; ~~delete~~ use `TERMINATION` to warn on abnormal Gaussian termination (it is public API per conventions) | `pyqrc/pyQRC.py` | No misnamed constant; Q-Chem path errors clearly when metadata is missing | S | Low | — |
 | 3.3 ✅ | CI/lint tidy-up: pylint workflow on `[push, pull_request]`; orphan `[tool.ruff.lint]` config deleted (pylint is the enforced linter); Python 3.13 added to both CI matrices and classifiers (D5) | `.github/workflows/pylint.yml`, `pyproject.toml`, `.circleci/config.yml` | PRs from forks get linted; no orphan tool config; 3.13 green | S | Low | — |
-| 3.4 | Audit the README options table against `pyqrc --help` (the `-v` → `-q` fix is already done) | `README.md` | Table matches `--help` verbatim | S | None | 1.2 |
+| 3.4 ✅ | Audit the README options table against `pyqrc --help` (the `-v` → `-q` fix is already done) | `README.md` | Table matches `--help` verbatim | S | None | 1.2 |
 
 ## Quick wins (all S, can be done immediately)
 
@@ -79,8 +79,8 @@ parse/compute/write with a `write=False` library mode, and the suite runs
 with zero skips on release cclib. **v2.2.0 was released to PyPI on
 2026-06-11** via the Trusted Publishing workflow (wheel verified to
 contain `run_g16.sh`).
-Remaining: 3.1 (`--qcoord` robustness, deferred per D1), 3.2 (Q-Chem
-`METHOD None` guard + unused `TERMINATION`), 3.4 (README/--help audit).
+Milestone 3 is also complete except 3.1 (`--qcoord` robustness), which
+stays deferred per D1 until there is evidence of `--qcoord` usage.
 
 ## Releasing
 

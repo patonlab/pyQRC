@@ -73,16 +73,16 @@ python -m pyqrc [options] <output_file(s)>
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--amp AMPLITUDE` | Multiplier for the imaginary normal mode vector. Increase for larger displacements; use negative values for reverse direction. | `0.2` |
-| `--nproc N` | Number of processors requested in the new input file. | `1` |
-| `--mem NGB` | Memory requested in the new input file. Format: `XGB` or `X000MB`. | `4GB` |
-| `--route 'THEORY/BASIS'` | Route line for the new calculation. | Same as original |
-| `--name SUFFIX` | String appended to the filename for new input file(s). | `QRC` |
+| `--nproc NPROC` | Number of processors requested in the new input file. | `1` |
+| `--mem MEM` | Memory requested in the new input file. Format: `XGB` or `X000MB`. | `4GB` |
+| `--route ROUTE` | Route line for the new calculation, e.g. `'THEORY/BASIS opt'`. | Same as original |
 | `-q, --quiet` | Suppress verbose output (skips the `.qrc` summary file). | Verbose by default |
 | `--auto` | Only process files with imaginary frequencies, skip others. | Disabled |
-| `-f, --freq VALUE` | Displace along the normal mode nearest this frequency (cm⁻¹); errors if no mode is within 1 cm⁻¹. | All imaginary |
-| `--freqnum N` | Displace along frequency number N (from lowest); errors if N exceeds the number of modes. | All imaginary |
+| `--name SUFFIX` | String appended to the filename for new input file(s). | `QRC` |
+| `-f, --freq FREQ` | Displace along the normal mode nearest this frequency (cm⁻¹); errors if no mode is within 1 cm⁻¹. | All imaginary |
+| `--freqnum FREQNUM` | Displace along frequency number N (from lowest); errors if N exceeds the number of modes. | All imaginary |
 | `--qcoord` | Automatic single point calculations along normal modes. | Disabled |
-| `--nummodes N` | Number of modes for `--qcoord` calculations. | `all` |
+| `--nummodes NUMMODES` | Number of modes for `--qcoord` calculations. | `all` |
 
 ## Output Files
 
