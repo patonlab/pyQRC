@@ -79,8 +79,8 @@ python -m pyqrc [options] <output_file(s)>
 | `--name SUFFIX` | String appended to the filename for new input file(s). | `QRC` |
 | `-q, --quiet` | Suppress verbose output (skips the `.qrc` summary file). | Verbose by default |
 | `--auto` | Only process files with imaginary frequencies, skip others. | Disabled |
-| `-f, --freq VALUE` | Displace along a specific frequency (in cm⁻¹). | All imaginary |
-| `--freqnum N` | Displace along frequency number N (from lowest). | All imaginary |
+| `-f, --freq VALUE` | Displace along the normal mode nearest this frequency (cm⁻¹); errors if no mode is within 1 cm⁻¹. | All imaginary |
+| `--freqnum N` | Displace along frequency number N (from lowest); errors if N exceeds the number of modes. | All imaginary |
 | `--qcoord` | Automatic single point calculations along normal modes. | Disabled |
 | `--nummodes N` | Number of modes for `--qcoord` calculations. | `all` |
 
