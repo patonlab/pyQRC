@@ -16,6 +16,8 @@ The program will read a Gaussian frequency calculation and will create a new inp
 
 In addition to a pound-shop (dollar store) IRC calculation, a common application for pyQRC is in distorting ground state structures to remove annoying imaginary frequencies after reoptimization. This code has, in some form or other, been in use since around 2010.
 
+pyQRC reads frequency calculations from Gaussian, ORCA, and Q-Chem. It also integrates with [ASE](https://wiki.fysik.dtu.dk/ase/) and machine-learned interatomic potentials (MLIPs such as MACE, ANI, or AIMNet2): the bridge script in [examples/ase_mlip](examples/ase_mlip/) writes ASE frequency results in a format pyQRC reads, so Hessians from an MLIP work exactly like QM output files. Runnable Jupyter notebooks demonstrating each route — [Gaussian 16](examples/g16/generate_qrc_inputs.ipynb), [ORCA 5](examples/orca5/generate_qrc_inputs.ipynb) and [6](examples/orca6/generate_qrc_inputs.ipynb), [Q-Chem](examples/qchem/generate_qrc_inputs.ipynb), and [ASE/MLIP](examples/ase_mlip/generate_qrc_inputs.ipynb) — ship in the [examples](examples/) directory.
+
 ## Quick Start
 
 ```bash
@@ -107,7 +109,7 @@ pyQRC generates the following files:
 
 ## Examples
 
-The input and output files for the examples below ship in the [examples](examples/) directory. Each format subdirectory ([g16](examples/g16/), [orca5](examples/orca5/), [orca6](examples/orca6/), [qchem](examples/qchem/)) also contains a runnable Jupyter notebook (`generate_qrc_inputs.ipynb`) that walks through generating QRC inputs from those files.
+The input and output files for the examples below ship in the [examples](examples/) directory. Each format subdirectory ([g16](examples/g16/), [orca5](examples/orca5/), [orca6](examples/orca6/), [qchem](examples/qchem/), [ase_mlip](examples/ase_mlip/)) also contains a runnable Jupyter notebook (`generate_qrc_inputs.ipynb`) that walks through generating QRC inputs from those files.
 
 ### Example 1: Remove an Unwanted Imaginary Frequency
 
@@ -134,6 +136,10 @@ python -m pyqrc planar_chex.log --nproc 4 --freqnum 3 --name mode3
 ```
 
 In this example, the initial optimization located a (3rd order) saddle point - planar cyclohexane - with three imaginary frequencies. Two new inputs are created by displacing along (i) only the first (i.e., lowest) normal mode and (ii) only the third normal mode. This contrasts from the `--auto` function of pyQRC which displaces along all imaginary modes. Subsequent optimizations of these new inputs results in different minima, producing (i) chair-shaped cyclohexane and (ii) twist-boat cyclohexane. This example illustrates that displacement along particular normal modes could be used for e.g. conformational sampling.
+
+### Example 4: QRC from an ASE / MLIP Frequency Calculation
+
+When the Hessian comes from a machine-learned interatomic potential driven through [ASE](https://wiki.fysik.dtu.dk/ase/) rather than a QM package, there is no output file for pyQRC to read. The helper script [`examples/ase_mlip/ase2gaussian.py`](examples/ase_mlip/ase2gaussian.py) bridges the gap: it writes an ASE `Vibrations` result as a Gaussian-format log file that cclib parses, after which pyQRC works exactly as in the examples above. The accompanying [notebook](examples/ase_mlip/generate_qrc_inputs.ipynb) walks through the full loop with [MACE-OFF](https://github.com/ACEsuit/mace): locating the planar NH₃ inversion transition state and relaxing the QRC-displaced geometry to the pyramidal minimum, then mapping the Claisen reaction coordinate of Example 2 entirely on the MLIP — the forward and reverse QRC displacements from the DFT transition state relax to 4-pentenal and allyl vinyl ether without any further QM calculations.
 
 ## Comparison with IRC
 

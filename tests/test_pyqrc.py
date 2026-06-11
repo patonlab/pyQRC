@@ -1844,3 +1844,87 @@ class TestMainModule:
         import importlib
         mod = importlib.import_module('pyqrc.__main__')
         assert hasattr(mod, 'main')
+
+
+class TestAseMlipBridge:
+    """Tests for the examples/ase_mlip/ase2gaussian.py helper."""
+
+    @pytest.fixture
+    def ase2gaussian(self):
+        """Import the example helper module from the examples directory."""
+        pytest.importorskip("ase")
+        import importlib.util
+        from tests.conftest import EXAMPLES_PATH
+        spec = importlib.util.spec_from_file_location(
+            "ase2gaussian", EXAMPLES_PATH / "ase_mlip" / "ase2gaussian.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    @pytest.fixture
+    def fake_ts(self, ase2gaussian, temp_workdir):
+        """Write a synthetic 'transition state' log and return its pieces."""
+        from ase import Atoms
+        atoms = Atoms("OH2", positions=[[0.0, 0.0, 0.119],
+                                        [0.0, 0.763, -0.477],
+                                        [0.0, -0.763, -0.477]])
+        freqs = np.array([-500.0, 1600.0, 3700.0])
+        rng = np.random.default_rng(42)
+        modes = rng.normal(size=(3, 3, 3))
+        logfile = temp_workdir / "fake_ts.log"
+        ase2gaussian.write_gaussian_freq_log(
+            str(logfile), atoms, freqs, modes, energy=-76.4)
+        norms = np.linalg.norm(modes.reshape(3, -1), axis=1)
+        return logfile, atoms, freqs, modes / norms[:, None, None]
+
+    def test_cclib_roundtrip(self, fake_ts):
+        """cclib must recover the geometry, frequencies, and modes."""
+        import cclib
+        logfile, atoms, freqs, modes = fake_ts
+        data = cclib.io.ccread(str(logfile))
+        assert data.natom == 3
+        np.testing.assert_allclose(data.atomcoords[-1], atoms.get_positions(),
+                                   atol=1e-6)
+        np.testing.assert_allclose(data.vibfreqs, freqs, atol=1e-4)
+        np.testing.assert_allclose(data.vibdisps, modes, atol=0.006)
+        np.testing.assert_allclose(data.scfenergies[-1] / 27.211386245988,
+                                   -76.4, atol=1e-6)
+
+    def test_qrc_displaces_along_imaginary_mode(self, fake_ts, temp_workdir):
+        """QRCGenerator must displace the synthetic log along its imaginary mode."""
+        logfile, atoms, freqs, modes = fake_ts
+        qrc = QRCGenerator(
+            file=str(logfile),
+            amplitude=0.3,
+            nproc=1,
+            mem="4GB",
+            route=None,
+            verbose=False,
+            suffix="QRC",
+            val=None,
+            num=None,
+        )
+        displacement = np.asarray(qrc.NEW_CARTESIAN) - np.asarray(qrc.CARTESIAN)
+        norm = np.linalg.norm(displacement)
+        assert norm > 0.01, "geometry was not displaced"
+        cosine = np.dot(displacement.ravel(), modes[0].ravel()) / norm
+        assert abs(cosine) > 0.99, "displacement is not along the imaginary mode"
+        assert (temp_workdir / "fake_ts_QRC.com").exists()
+
+    def test_extract_vibrations(self, ase2gaussian):
+        """extract_vibrations must sign imaginary modes and drop trans/rot."""
+        class FakeVibrations:
+            def get_energies(self):
+                # 0.062 eV ~ 500 cm-1; tiny values are trans/rot noise
+                return np.array([0.0620j, 1e-6j, 2e-6, 0.1984, 0.4587])
+
+            def get_mode(self, i):
+                mode = np.zeros((2, 3))
+                mode[0, 0] = i + 1.0
+                return mode
+
+        freqs, modes = ase2gaussian.extract_vibrations(FakeVibrations())
+        assert freqs[0] < -400, "imaginary mode should be negative"
+        assert len(freqs) == 3, "near-zero trans/rot modes should be dropped"
+        assert modes.shape == (3, 2, 3)
+        np.testing.assert_allclose(modes[:, 0, 0], [1.0, 4.0, 5.0])
