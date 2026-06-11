@@ -49,6 +49,17 @@ pixi add --pypi pyqrc
 **From source:**
 Clone the repository https://github.com/patonlab/pyQRC.git and add to your PYTHONPATH variable.
 
+### ORCA 6 compatibility
+
+Parsing ORCA 6 output files requires a newer cclib than the current PyPI release (1.8.1), which fails on ORCA 6's SCF block. Until cclib ships a release with the fix, install cclib from GitHub master alongside pyQRC:
+
+```bash
+pip install pyqrc
+pip install --upgrade 'git+https://github.com/cclib/cclib.git'
+```
+
+Note: cclib master currently has a regression affecting some Q-Chem outputs. If you primarily use Q-Chem, stay on cclib 1.8.1.
+
 Then run the script as a Python module with your computational chemistry output files (the program expects `.log` or `.out` extensions) and can accept wildcard arguments.
 
 ## Usage
@@ -66,7 +77,7 @@ python -m pyqrc [options] <output_file(s)>
 | `--mem NGB` | Memory requested in the new input file. Format: `XGB` or `X000MB`. | `4GB` |
 | `--route 'THEORY/BASIS'` | Route line for the new calculation. | Same as original |
 | `--name SUFFIX` | String appended to the filename for new input file(s). | `QRC` |
-| `-v` | Verbose output. | Enabled |
+| `-q, --quiet` | Suppress verbose output (skips the `.qrc` summary file). | Verbose by default |
 | `--auto` | Only process files with imaginary frequencies, skip others. | Disabled |
 | `-f, --freq VALUE` | Displace along a specific frequency (in cm⁻¹). | All imaginary |
 | `--freqnum N` | Displace along frequency number N (from lowest). | All imaginary |
@@ -133,6 +144,18 @@ To benchmark QRC against intrinsic reaction coordinate (IRC) calculations, 544 t
 | 0.5       | 0.58                   | 3.44                      | 98.7%          | 98.2%         |
 
 An amplitude of **0.3** gives the best overall performance, with the highest SMILES match rates for both reactants and products (98.9%) and low MAE for barriers (0.65 kcal/mol) and reaction energies (1.39 kcal/mol). While an amplitude of 0.5 gives a marginally lower barrier MAE (0.58 kcal/mol), it produces larger errors in reaction energies and lower product match rates. An amplitude of 0.1 gives insufficient displacement, leading to higher energy errors and more mismatched products. Full details and data are available in the [irc_comparison](irc_comparison/analysis/) directory.
+
+## Development
+
+```bash
+git clone https://github.com/patonlab/pyQRC.git
+cd pyQRC
+pip install -e ".[dev]"
+pytest            # run the test suite
+pylint pyqrc      # lint (CI requires a score >= 9.0)
+```
+
+Planned work is tracked in [ROADMAP.md](ROADMAP.md).
 
 ## Citation
 

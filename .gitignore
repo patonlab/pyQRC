@@ -62,10 +62,11 @@ ENV/
 env.bak/
 venv.bak/
 
-# IDE
+# IDE / AI assistant
 .idea/
 .vscode/
 .claude/
+CLAUDE.md
 *.swp
 *.swo
 *~
