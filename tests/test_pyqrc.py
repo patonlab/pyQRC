@@ -16,6 +16,7 @@ from pyqrc.pyQRC import (
     Logger,
     OutputData,
     QRCGenerator,
+    QRCModeError,
     QRCParseError,
     check_overlap,
     element_id,
@@ -548,14 +549,19 @@ class TestMain:
         if not g16_claisen_ts.exists():
             pytest.skip("Gaussian TS test file not found")
 
+        import cclib
+
         shutil.copy(g16_claisen_ts, temp_workdir)
         local_file = temp_workdir / g16_claisen_ts.name
 
-        # Use a frequency value that exists in the file
-        monkeypatch.setattr('sys.argv', ['pyqrc', '-f', '-500', str(local_file)])
-        main()
+        # A value within the matching tolerance of the imaginary frequency
+        data = cclib.io.ccopen(str(local_file)).parse()
+        target = round(float(data.vibfreqs[0]), 1)
 
-        # Should still create output even if freq doesn't exactly match
+        monkeypatch.setattr('sys.argv', ['pyqrc', '-f', str(target), str(local_file)])
+        exit_code = main()
+
+        assert exit_code == 0
         assert (temp_workdir / f"{local_file.stem}_QRC.com").exists()
 
     def test_main_with_freqnum_option(self, g16_claisen_ts, temp_workdir, monkeypatch):
@@ -1067,10 +1073,15 @@ class TestPrintOutput:
         if not g16_claisen_ts.exists():
             pytest.skip("Gaussian TS test file not found")
 
+        import cclib
+
         shutil.copy(g16_claisen_ts, temp_workdir)
         local_file = temp_workdir / g16_claisen_ts.name
 
-        monkeypatch.setattr('sys.argv', ['pyqrc', '-f', '-500.0', str(local_file)])
+        data = cclib.io.ccopen(str(local_file)).parse()
+        target = round(float(data.vibfreqs[0]), 1)
+
+        monkeypatch.setattr('sys.argv', ['pyqrc', '-f', str(target), str(local_file)])
         main()
 
         captured = capsys.readouterr()
@@ -1735,11 +1746,7 @@ class TestQcoordMode:
 
 
 class TestCLIFailureModes:
-    """Characterization tests for desired CLI failure behavior (ROADMAP 0.3).
-
-    Marked strict-xfail until the corresponding fixes land:
-    missing files (1.3), unmatched --freq / out-of-range --freqnum (1.2).
-    """
+    """CLI failure behavior: bad inputs must fail loudly (ROADMAP 0.3/1.2/1.3)."""
 
     def test_missing_file_exits_nonzero(self, tmp_path, monkeypatch, capsys):
         """A nonexistent input file should produce an error message and exit 1."""
@@ -1751,7 +1758,6 @@ class TestCLIFailureModes:
         assert exit_code == 1
         assert 'no such file' in captured.out
 
-    @pytest.mark.xfail(strict=True, reason="ROADMAP 1.2: unmatched --freq currently writes an undisplaced input")
     def test_unmatched_freq_errors_and_writes_nothing(self, g16_claisen_ts, temp_workdir, monkeypatch, capsys):
         """--freq matching no normal mode should exit 1 and write no input file."""
         shutil.copy(g16_claisen_ts, temp_workdir)
@@ -1766,7 +1772,6 @@ class TestCLIFailureModes:
         assert 'failed' in captured.out
         assert not (temp_workdir / f"{local_file.stem}_QRC.com").exists()
 
-    @pytest.mark.xfail(strict=True, reason="ROADMAP 1.2: out-of-range --freqnum currently writes an undisplaced input")
     def test_out_of_range_freqnum_errors_and_writes_nothing(self, g16_claisen_ts, temp_workdir, monkeypatch, capsys):
         """--freqnum beyond the number of modes should exit 1 and write no input file."""
         shutil.copy(g16_claisen_ts, temp_workdir)
@@ -1779,6 +1784,37 @@ class TestCLIFailureModes:
         assert exit_code == 1
         assert 'failed' in captured.out
         assert not (temp_workdir / f"{local_file.stem}_QRC.com").exists()
+
+
+class TestResolveTargetModes:
+    """Unit tests for QRCGenerator._resolve_target_modes."""
+
+    FREQS = np.array([-536.5, 102.3, 250.0, 1700.8])
+
+    def test_default_selects_imaginary_modes(self):
+        modes = QRCGenerator._resolve_target_modes(self.FREQS, None, None)
+        assert modes == {0}
+
+    def test_freq_nearest_match_within_tolerance(self):
+        """A value within 1 cm-1 of a mode matches that mode."""
+        modes = QRCGenerator._resolve_target_modes(self.FREQS, -536.0, None)
+        assert modes == {0}
+
+    def test_freq_no_match_raises(self):
+        with pytest.raises(QRCModeError, match="nearest"):
+            QRCGenerator._resolve_target_modes(self.FREQS, -500.0, None)
+
+    def test_freqnum_valid(self):
+        modes = QRCGenerator._resolve_target_modes(self.FREQS, None, 3)
+        assert modes == {2}
+
+    def test_freqnum_out_of_range_raises(self):
+        with pytest.raises(QRCModeError, match="out of range"):
+            QRCGenerator._resolve_target_modes(self.FREQS, None, 99)
+
+    def test_freqnum_zero_raises(self):
+        with pytest.raises(QRCModeError, match="out of range"):
+            QRCGenerator._resolve_target_modes(self.FREQS, None, 0)
 
 
 class TestMainModule:
