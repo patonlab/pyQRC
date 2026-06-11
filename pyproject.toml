@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyqrc"
-version = "2.2.0"
+dynamic = ["version"]
 description = "A Python program to project computed structures along normal modes for Quick Reaction Coordinate calculations"
 readme = "README.md"
 license = {text = "MIT"}
@@ -62,6 +62,9 @@ pyqrc = "pyqrc.pyQRC:main"
 [tool.setuptools]
 packages = ["pyqrc"]
 include-package-data = true
+
+[tool.setuptools.dynamic]
+version = {attr = "pyqrc.pyQRC.__version__"}
 
 [tool.setuptools.package-data]
 pyqrc = ["run_g16.sh"]
