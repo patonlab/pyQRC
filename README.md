@@ -16,6 +16,8 @@ The program will read a Gaussian frequency calculation and will create a new inp
 
 In addition to a pound-shop (dollar store) IRC calculation, a common application for pyQRC is in distorting ground state structures to remove annoying imaginary frequencies after reoptimization. This code has, in some form or other, been in use since around 2010.
 
+pyQRC reads frequency calculations from Gaussian, ORCA, and Q-Chem. It also integrates with [ASE](https://wiki.fysik.dtu.dk/ase/) and machine-learned interatomic potentials (MLIPs such as MACE, ANI, or AIMNet2): the bridge script in [examples/ase_mlip](examples/ase_mlip/) writes ASE frequency results in a format pyQRC reads, so Hessians from an MLIP work exactly like QM output files. Runnable Jupyter notebooks demonstrating each route — [Gaussian 16](examples/g16/generate_qrc_inputs.ipynb), [ORCA 5](examples/orca5/generate_qrc_inputs.ipynb) and [6](examples/orca6/generate_qrc_inputs.ipynb), [Q-Chem](examples/qchem/generate_qrc_inputs.ipynb), and [ASE/MLIP](examples/ase_mlip/generate_qrc_inputs.ipynb) — ship in the [examples](examples/) directory.
+
 ## Quick Start
 
 ```bash
