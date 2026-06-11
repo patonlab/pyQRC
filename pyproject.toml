@@ -64,7 +64,7 @@ packages = ["pyqrc"]
 include-package-data = true
 
 [tool.setuptools.package-data]
-pyqrc = ["examples/*"]
+pyqrc = ["run_g16.sh"]
 
 [tool.pylint.main]
 py-version = "3.9"
