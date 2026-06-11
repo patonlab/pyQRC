@@ -727,17 +727,21 @@ def main() -> int:
 
     args = parser.parse_args()
 
-    # Collect input files
+    # Collect input files, expanding any glob patterns the shell left unexpanded
     files = []
-    for elem in sys.argv[1:]:
-        try:
-            if os.path.splitext(elem)[1] in [".out", ".log"]:
-                for file in glob(elem):
-                    files.append(file)
-        except IndexError:
-            pass
-
     exit_code = 0
+    for pattern in args.files:
+        matches = sorted(glob(pattern))
+        if not matches:
+            print(f'x   {pattern}: no such file')
+            exit_code = 1
+            continue
+        for file in matches:
+            if os.path.splitext(file)[1] not in ('.out', '.log'):
+                print(f'x   {file} skipped: expected a .log or .out file')
+                exit_code = 1
+                continue
+            files.append(file)
     for file in files:
         # Parse output with cclib and count imaginary frequencies
         try:

@@ -1741,7 +1741,6 @@ class TestCLIFailureModes:
     missing files (1.3), unmatched --freq / out-of-range --freqnum (1.2).
     """
 
-    @pytest.mark.xfail(strict=True, reason="ROADMAP 1.3: missing files currently exit 0 silently")
     def test_missing_file_exits_nonzero(self, tmp_path, monkeypatch, capsys):
         """A nonexistent input file should produce an error message and exit 1."""
         monkeypatch.chdir(tmp_path)
