@@ -6,6 +6,7 @@ displacing molecular structures along normal modes.
 """
 
 from pyqrc.pyQRC import (
+    __version__,
     QRCGenerator,
     QRCParseError,
     QRCModeError,
@@ -19,7 +20,6 @@ from pyqrc.pyQRC import (
     COVALENT_RADII,
 )
 
-__version__ = "2.2.0"
 __author__ = "Robert Paton"
 __email__ = "robert.paton@colostate.edu"
 
