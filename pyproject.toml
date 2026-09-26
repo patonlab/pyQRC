@@ -50,6 +50,7 @@ dev = [
     "pytest-cov",
     "pylint>=3.0",
     "ase",
+    "nbval",
 ]
 
 [project.urls]

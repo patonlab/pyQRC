@@ -355,14 +355,21 @@ class OutputData:
     def _get_termination(self, outlines: list[str]) -> None:
         """Check if calculation terminated normally.
 
+        A Gaussian job such as "opt freq" runs several steps, each printing
+        its route and its own "Normal termination" line, so every step
+        must have terminated normally.
+
         Args:
             outlines: List of lines from output file.
         """
         if self.format == "Gaussian":
-            for line in outlines:
-                if "Normal termination" in line:
-                    self.TERMINATION = "normal"
-                    return
+            steps = sum(
+                1 for i, line in enumerate(outlines[1:], 1)
+                if line.startswith(' #') and outlines[i - 1].strip().startswith('-----')
+            )
+            normal = sum(1 for line in outlines if "Normal termination" in line)
+            if normal and normal >= steps:
+                self.TERMINATION = "normal"
 
 
 def mwdist(coords1: np.ndarray, coords2: np.ndarray, elements: list[int]) -> float:
@@ -1035,6 +1042,11 @@ class QRCGenerator:
         self.DISPS = data.vibdisps
 
         nmodes = len(self.FREQS)
+        if self.NATOMS > 2 and nmodes < 3 * self.NATOMS - 6:
+            _print_once(
+                f'Warning - {self.file}: only {nmodes} of {3 * self.NATOMS - 6} normal modes '
+                'were read: the output may be incomplete (or atoms were frozen)'
+            )
         self.RMASS = data.vibrmasses if hasattr(data, 'vibrmasses') else [0.0] * nmodes
         self.FCONST = data.vibfconsts if hasattr(data, 'vibfconsts') else [0.0] * nmodes
 
@@ -1060,7 +1072,6 @@ class QRCGenerator:
         Raises:
             QRCModeError: If a specifically requested mode cannot be matched.
         """
-        nmodes = len(self.FREQS)
         self._target_modes = self._resolve_target_modes(self.FREQS, self.val, self.num)
 
         new_cartesian = self.CARTESIAN.copy()
@@ -1580,6 +1591,7 @@ def main() -> int:
             im_freq = len([val for val in data.vibfreqs if val < 0])
         else:
             print(f'x   {file} has no frequency information: skipping')
+            exit_code = 1
             continue
 
         mode_requested = args.freq is not None or args.freqnum is not None

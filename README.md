@@ -193,7 +193,14 @@ cd pyQRC
 pip install -e ".[dev]"
 pytest            # run the test suite
 pylint pyqrc      # lint (CI requires a score >= 9.0)
+pytest --nbval examples/g16 examples/orca5 examples/orca6 examples/qchem   # check the notebooks
 ```
+
+**Golden files.** `tests/test_golden.py` runs every example output in `examples/` through pyQRC and compares the input it writes with a reference copy in `tests/golden/`, so any change to generated inputs shows up as a diff. After an intended change, or to add an example, run `pytest tests/test_golden.py --update-golden`, review the changed files in `tests/golden/`, and commit them.
+
+**Adding an example output.** Put the output in `examples/<program>/` (for Gaussian, also the `.com` or `.gjf` input with the same name, so input after the geometry is tested) and generate its golden file as above. It is then included in all example-based tests automatically. Real outputs that exercise less common input are especially welcome: Gen/GenECP basis sets, ModRedundant constraints, solvation, open-shell and charged species.
+
+**Notebooks.** The example notebooks' saved outputs are checked in CI with `nbval`, so re-run a notebook and commit it when its output changes. The ASE/MLIP notebook needs `mace-torch` and is not run in CI.
 
 Planned work is tracked in [ROADMAP.md](ROADMAP.md).
 

@@ -205,3 +205,20 @@ def pytest_generate_tests(metafunc):
         saddle_files = get_example_files_by_type('saddle')
         if saddle_files:
             metafunc.parametrize('saddle_file,saddle_format', _params(saddle_files))
+
+
+GOLDEN_PATH = Path(__file__).parent / 'golden'
+
+
+def pytest_addoption(parser):
+    """--update-golden rewrites tests/golden from the current code."""
+    parser.addoption(
+        '--update-golden', action='store_true', default=False,
+        help='rewrite the expected pyQRC inputs in tests/golden instead of comparing',
+    )
+
+
+@pytest.fixture
+def update_golden(request):
+    """True when pytest was run with --update-golden."""
+    return request.config.getoption('--update-golden')

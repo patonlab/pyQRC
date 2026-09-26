@@ -1310,7 +1310,7 @@ class TestMainNoFreqInfo:
 
         captured = capsys.readouterr()
         assert 'no frequency information' in captured.out
-        assert exit_code == 0
+        assert exit_code == 1  # not a frequency output: probably the wrong file
 
 
 class TestUnknownFormat:

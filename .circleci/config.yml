@@ -30,6 +30,22 @@ jobs:
             pip install codecov-cli
             codecovcli upload-process --file coverage.xml || echo "Codecov upload failed; not failing the build"
 
+  notebooks:
+    docker:
+      - image: cimg/python:3.12
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: |
+            pip install --upgrade pip
+            pip install -e ".[dev]"
+      - run:
+          name: Run example notebooks and compare their saved outputs
+          # The ASE/MLIP notebook needs MACE (PyTorch) and a model download, so
+          # it is not run here; the rest must reproduce their outputs exactly.
+          command: pytest --nbval -p no:cacheprovider examples/g16 examples/orca5 examples/orca6 examples/qchem
+
   package:
     docker:
       - image: cimg/python:3.12
@@ -66,4 +82,5 @@ workflows:
           matrix:
             parameters:
               python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+      - notebooks
       - package
