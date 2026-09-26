@@ -1274,11 +1274,11 @@ class TestRunIRC:
         options = Namespace(nproc=1, mem="4GB", verbose=False)
 
         with patch('pyqrc.pyQRC.g16_opt') as mock_g16:
-            with patch('pyqrc.pyQRC.check_overlap', return_value=True):
-                log = Logger("test", "dat", "irc2")
-                run_irc(str(local_file), options, 1, 0.2, None, "test_overlap", log)
-                mock_g16.assert_not_called()
-                log.close()
+            log = Logger("test", "dat", "irc2")
+            # A huge displacement along the TS mode creates atom clashes
+            run_irc(str(local_file), options, 1, 5.0, None, "test_overlap", log)
+            mock_g16.assert_not_called()
+            log.close()
 
 
 class TestMainNoFreqInfo:
@@ -2666,3 +2666,23 @@ class TestFromAse:
         np.testing.assert_allclose(direct.FREQS, via_log.FREQS, atol=1e-3)
         # The log stores displacements to 2 decimals
         np.testing.assert_allclose(direct.NEW_CARTESIAN, via_log.NEW_CARTESIAN, atol=0.3 * 0.006)
+
+
+class TestNewContactsOnly:
+    """Only close contacts created by the displacement count as overlaps."""
+
+    def test_nitrile_is_not_a_clash(self, tmp_path):
+        """A C#N bond is shorter than the contact threshold before any displacement."""
+        coords = np.array([[0.0, 0.0, 0.0], [1.14, 0.0, 0.0], [-1.09, 0.0, 0.0]])
+        modes = np.zeros((1, 3, 3))
+        modes[0, 2, 1] = 1.0  # move H sideways: no new contact
+        qrc = QRCGenerator.from_arrays([6, 7, 1], coords, [-100.0], modes, amplitude=0.3)
+        assert check_overlap(['C', 'N', 'H'], coords)  # the raw check flags C#N
+        assert not qrc.OVERLAPPED
+
+    def test_new_contact_is_a_clash(self):
+        coords = np.array([[0.0, 0.0, 0.0], [1.14, 0.0, 0.0], [-1.09, 0.0, 0.0]])
+        modes = np.zeros((1, 3, 3))
+        modes[0, 2, 0] = 1.0  # push H into C
+        qrc = QRCGenerator.from_arrays([6, 7, 1], coords, [-100.0], modes, amplitude=0.8)
+        assert qrc.OVERLAPPED

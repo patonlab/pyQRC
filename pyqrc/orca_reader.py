@@ -78,6 +78,14 @@ def _read_charge_mult(lines: list[str]) -> tuple[int, int]:
         if match:
             mult = int(match[1])
     if charge is None or mult is None:
+        # Semi-empirical (xTB) jobs do not print them; use the echoed input
+        for line in lines:
+            match = re.match(r'\|\s*\d+>\s*\*\s*(?:xyz|xyzfile|int|internal|gzmt|gzmtfile|pdbfile)'
+                             r'\s+(-?\d+)\s+(\d+)', line, re.IGNORECASE)
+            if match:
+                charge, mult = int(match[1]), int(match[2])
+                break
+    if charge is None or mult is None:
         raise ORCAReadError('charge or multiplicity not found')
     return charge, mult
 
@@ -122,14 +130,40 @@ def _read_normal_modes(lines: list[str], start: int, ncoords: int) -> np.ndarray
     return modes
 
 
+def _is_linear(coords: np.ndarray, tol: float = 1e-3) -> bool:
+    """True if all atoms lie on a line (within tol Angstrom)."""
+    if len(coords) < 3:
+        return True
+    centered = coords - coords.mean(axis=0)
+    singular = np.linalg.svd(centered, compute_uv=False)
+    return bool(singular[1] < tol * np.sqrt(len(coords)))
+
+
+def _count_translations_rotations(coords: np.ndarray, freqs: list[float]) -> int:
+    """Number of leading translation/rotation modes: 3 (atom), 5 (linear) or 6."""
+    if len(coords) == 1:
+        return 3
+    expected = 5 if _is_linear(coords) else 6
+    # ORCA projects them out and prints exactly 0.00; trust that count if it
+    # disagrees with the geometry test (e.g. a nearly linear molecule)
+    zeros = 0
+    for freq in freqs:
+        if freq != 0.0:
+            break
+        zeros += 1
+    if zeros in (5, 6) and zeros != expected:
+        return zeros
+    return expected
+
+
 def read_orca_frequencies(file: str) -> SimpleNamespace:
     """Read an ORCA frequency calculation.
 
     The returned object has the attributes of a cclib data object that
     pyQRC uses: natom, atomnos, atomcoords, charge, mult, vibfreqs,
-    vibdisps and metadata. Translations and rotations (the first modes, as
-    reported by ORCA's "first frequency considered to be a vibration"
-    line) are dropped, as cclib does.
+    vibdisps and metadata. Translations and rotations (the first 6 modes,
+    5 for a linear molecule, which ORCA prints as 0.00 cm-1) are dropped,
+    as cclib does. Imaginary modes are always kept.
 
     Args:
         file: Path to the ORCA output.
@@ -157,16 +191,9 @@ def read_orca_frequencies(file: str) -> SimpleNamespace:
         raise ORCAReadError(f'expected {ncoords} frequencies, found {len(freqs)}')
     modes = _read_normal_modes(lines, modes_start, ncoords)
 
-    first_vib = None
-    for line in lines[modes_start:]:
-        match = re.search(r'first frequency considered to be a vibration is\s+(\d+)', line)
-        if match:
-            first_vib = int(match[1]) - 1
-            break
-    if first_vib is None:
-        # Linear molecules have 5 translations/rotations, others 6
-        first_vib = 6 if ncoords > 6 else 5
-    first_vib = min(first_vib, ncoords)
+    # Not ORCA's "first frequency considered to be a vibration": that line
+    # is for thermochemistry and also skips the imaginary modes
+    first_vib = _count_translations_rotations(coords, freqs)
 
     version = None
     for line in lines[:200]:

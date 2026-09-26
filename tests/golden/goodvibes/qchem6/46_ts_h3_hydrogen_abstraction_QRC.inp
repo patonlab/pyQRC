@@ -1,0 +1,27 @@
+$molecule
+0 2
+ H   0.00000000   0.00000000  -1.04132560
+ H   0.00000000   0.00000000   0.24480002
+ H   0.00000000   0.00000000   0.79652558
+$end
+
+$rem
+   JOBTYPE opt
+   METHOD        mp2
+   BASIS         aug-cc-pVTZ
+   UNRESTRICTED  true
+$end
+
+@@@
+
+$molecule
+   read
+$end
+
+$rem
+   JOBTYPE freq
+   METHOD        mp2
+   BASIS         aug-cc-pVTZ
+   UNRESTRICTED  true
+$end
+

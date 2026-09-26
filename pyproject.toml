@@ -72,6 +72,12 @@ version = {attr = "pyqrc.pyQRC.__version__"}
 [tool.setuptools.package-data]
 pyqrc = ["run_g16.sh"]
 
+[tool.pytest.ini_options]
+filterwarnings = [
+    # cclib aligning linear molecules (scipy); harmless
+    "ignore:Optimal rotation is not uniquely or poorly defined:UserWarning",
+]
+
 [tool.pylint.main]
 py-version = "3.9"
 

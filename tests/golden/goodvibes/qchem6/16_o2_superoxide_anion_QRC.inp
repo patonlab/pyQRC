@@ -1,0 +1,26 @@
+$molecule
+-1 2
+ O   0.00000000   0.00000000  -0.45953482
+ O   0.00000000   0.00000000   0.45953482
+$end
+
+$rem
+   JOBTYPE opt
+   METHOD           b3lyp
+   BASIS            aug-cc-pVTZ
+   UNRESTRICTED     true
+$end
+
+@@@
+
+$molecule
+   read
+$end
+
+$rem
+   JOBTYPE freq
+   METHOD           b3lyp
+   BASIS            aug-cc-pVTZ
+   UNRESTRICTED     true
+$end
+

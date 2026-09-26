@@ -1,0 +1,12 @@
+! M062X 6-311+G(d,p) Opt Freq
+ %pal nprocs 4 end
+ %maxcore 2048
+# HCN linear triatomic - freq without Raman (ORCA default: no Raman)
+
+# 22_hcn_linear_freq_noraman_QRC
+
+* xyz 0 1
+ H  -0.27060960  -0.11865690  -1.06308900
+ C   0.04389750   0.01924830   0.00470900
+ N  -0.01816800  -0.00796620   1.14928000
+*

@@ -1,0 +1,42 @@
+$molecule
+0 1
+ C   0.01680284   0.18498855   0.02030151
+ O   0.59086649   0.30676847   1.07988662
+ O  -1.30166544  -0.10077056  -0.05083077
+ H  -1.63955273  -0.18220645   0.85818157
+ C   0.66017137   0.30973437  -1.32822112
+ H   1.34363611  -0.55271996  -1.46317798
+ H   1.27102116   1.23125428  -1.34980765
+ H  -0.08182562   0.32166359  -2.13959500
+$end
+
+$rem
+   JOBTYPE opt
+   METHOD           b3lyp
+   BASIS            6-311+G(d,p)
+   DFT_D            d3_bj
+   SOLVENT_METHOD   SMD
+$end
+
+$smx
+solvent dmso
+$end
+
+@@@
+
+$molecule
+   read
+$end
+
+$rem
+   JOBTYPE freq
+   METHOD           b3lyp
+   BASIS            6-311+G(d,p)
+   DFT_D            d3_bj
+   SOLVENT_METHOD   SMD
+$end
+
+$smx
+solvent dmso
+$end
+

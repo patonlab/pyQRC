@@ -222,3 +222,25 @@ def pytest_addoption(parser):
 def update_golden(request):
     """True when pytest was run with --update-golden."""
     return request.config.getoption('--update-golden')
+
+
+# Real outputs from the GoodVibes test suite (see tests/data/goodvibes/README.md)
+GOODVIBES_PATH = Path(__file__).parent / 'data' / 'goodvibes'
+GOODVIBES_FORMATS = {'g16': 'Gaussian', 'orca5': 'ORCA', 'orca6': 'ORCA', 'qchem6': 'QChem'}
+
+
+def get_goodvibes_files():
+    """Return (path, format) for every GoodVibes output in tests/data/goodvibes."""
+    return [
+        (path, fmt)
+        for directory, fmt in GOODVIBES_FORMATS.items()
+        for path in sorted((GOODVIBES_PATH / directory).glob('*'))
+        if path.suffix in ('.log', '.out')
+    ]
+
+
+def golden_name(path: Path) -> str:
+    """Golden-file directory for an output: <program dir>, or goodvibes/<program dir>."""
+    if GOODVIBES_PATH in path.parents:
+        return f'goodvibes/{path.parent.name}'
+    return path.parent.name

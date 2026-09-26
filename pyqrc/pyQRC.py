@@ -761,6 +761,28 @@ def read_orca_input(outlines: list[str]) -> tuple[Optional[str], list[str]]:
     return ' '.join(kw for kw in keywords if kw), other
 
 
+def read_qchem_charge_mult(file: str) -> Optional[tuple[int, int]]:
+    """Read charge and multiplicity from the first $molecule Q-Chem echoes.
+
+    cclib derives the Q-Chem charge from the electron count, which is wrong
+    with effective core potentials (e.g. +46 for iodobenzene with an ECP).
+
+    Args:
+        file: Path to the Q-Chem output.
+
+    Returns:
+        (charge, multiplicity), or None if not found.
+    """
+    with open(file, encoding='utf-8', errors='replace') as f:
+        lines = f.read().splitlines()
+    for i, line in enumerate(lines):
+        if line.strip().lower() == '$molecule':
+            fields = next((l.split() for l in lines[i + 1:] if l.strip()), [])
+            if len(fields) == 2 and all(re.fullmatch(r'-?\d+', x) for x in fields):
+                return int(fields[0]), int(fields[1])
+    return None
+
+
 def read_qchem_input(file: str) -> Optional[tuple[list[str], list[str]]]:
     """Read the input that Q-Chem echoes under "User input:" for each job.
 
@@ -1000,6 +1022,10 @@ class QRCGenerator:
                 f"Could not determine file format for '{self.file}'. "
                 "Ensure it is a valid Gaussian, ORCA, or Q-Chem output file."
             )
+        if getattr(data, 'metadata', {}).get('package') == 'QChem':
+            charge_mult = read_qchem_charge_mult(self.file)
+            if charge_mult is not None:
+                data.charge, data.mult = charge_mult
 
         self._set_data(data)
 
@@ -1082,7 +1108,11 @@ class QRCGenerator:
 
         self.NEW_CARTESIAN = new_cartesian
         self.MW_DISTANCE = mwdist(self.NEW_CARTESIAN, self.CARTESIAN, self.ATOMNOS)
-        self.OVERLAPPED = check_overlap(self.ATOMTYPES, self.NEW_CARTESIAN)
+        # Only contacts created by the displacement count: short bonds such
+        # as C#N are already below the threshold in the original structure
+        new_contacts = gen_overlap(self.ATOMTYPES, self.NEW_CARTESIAN, 0.8)
+        old_contacts = gen_overlap(self.ATOMTYPES, self.CARTESIAN, 0.8)
+        self.OVERLAPPED = bool(np.any((new_contacts > 0) & (old_contacts == 0)))
         return self.NEW_CARTESIAN
 
     def write_files(self) -> None:
@@ -1578,8 +1608,12 @@ def main() -> int:
         # Parse output and count imaginary frequencies
         try:
             data = parse_output(file)
-        except Exception as exc:
+        except QRCParseError as exc:
             print(f'x   {file} failed to parse: {exc}')
+            exit_code = 1
+            continue
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            print(f'x   {file} failed to parse ({exc}): the job may have failed or the output is incomplete')
             exit_code = 1
             continue
         if data is None:
