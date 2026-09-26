@@ -12,7 +12,7 @@
 
 QRC is an abbreviation of **Quick Reaction Coordinate**. This provides a quick alternative to IRC (intrinsic reaction coordinate) calculations. This was first described by Silva and Goodman.<sup>1</sup> The [original code](http://www-jmg.ch.cam.ac.uk/software/QRC/) was developed in Java for Jaguar output files. This Python version uses [cclib](https://cclib.github.io/) to process a variety of computational chemistry outputs.
 
-The program will read a Gaussian frequency calculation and will create a new input file which has been projected from the final coordinates along the Hessian eigenvector with a negative force constant. The magnitude of displacement can be adjusted on the command line. By default the projection will be in a positive sense (in relation to the imaginary normal mode) and the level of theory in the new input file will match that of the frequency calculation.
+The program will read a Gaussian frequency calculation and will create a new input file which has been projected from the final coordinates along the Hessian eigenvector with a negative force constant. The magnitude of displacement can be adjusted on the command line. By default the projection will be in a positive sense (in relation to the imaginary normal mode) and the level of theory in the new input file will match that of the frequency calculation. The new input is set up to optimize to a minimum: saddle-point keywords from the original job (e.g. Gaussian `opt=(ts,noeigentest)`, ORCA `OptTS`) are replaced, and everything else in the original input — basis-set and ECP sections, solvation settings, constraints — is carried over (see [New input files](#new-input-files)).
 
 In addition to a pound-shop (dollar store) IRC calculation, a common application for pyQRC is in distorting ground state structures to remove annoying imaginary frequencies after reoptimization. This code has, in some form or other, been in use since around 2010.
 
@@ -29,6 +29,9 @@ python -m pyqrc my_ts.log
 
 # Specify processors and memory for the new input file
 python -m pyqrc my_ts.log --nproc 4 --mem 8GB
+
+# QRC from a transition state: inputs displaced in both directions
+python -m pyqrc my_ts.log --both --nproc 4 --mem 8GB
 ```
 
 ## Installation
@@ -62,7 +65,7 @@ pip install --upgrade 'git+https://github.com/cclib/cclib.git'
 
 Note: cclib master currently has a regression affecting some Q-Chem outputs. If you primarily use Q-Chem, stay on cclib 1.8.1.
 
-Then run the script as a Python module with your computational chemistry output files (the program expects `.log` or `.out` extensions) and can accept wildcard arguments.
+Then run the script as a Python module with your computational chemistry output files (the program expects `.log` or `.out` extensions, in any case) and can accept wildcard arguments.
 
 ## Usage
 
@@ -74,15 +77,17 @@ python -m pyqrc [options] <output_file(s)>
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--amp AMPLITUDE` | Multiplier for the imaginary normal mode vector. Increase for larger displacements; use negative values for reverse direction. | `0.2` |
+| `--amp AMPLITUDE` | Multiplier for the imaginary normal mode vector. Increase for larger displacements; use negative values for reverse direction. | `0.3` |
 | `--nproc NPROC` | Number of processors requested in the new input file. | `1` |
-| `--mem MEM` | Memory requested in the new input file. Format: `XGB` or `X000MB`. | `4GB` |
-| `--route ROUTE` | Route line for the new calculation, e.g. `'THEORY/BASIS opt'`. | Same as original |
+| `--mem MEM` | Total memory requested in the new input file, e.g. `8GB` or `4000MB` (case-insensitive). For ORCA this is divided by `--nproc` to give `%maxcore`, which is per core. | `4GB` |
+| `--route ROUTE` | Route line (Gaussian) or `!` keywords (ORCA) for the new calculation, used exactly as given, e.g. `'THEORY/BASIS opt'`. Ignored for Q-Chem. | Original, changed to a minimization |
 | `-q, --quiet` | Suppress verbose output (skips the `.qrc` summary file). | Verbose by default |
 | `--auto` | Only process files with imaginary frequencies, skip others. | Disabled |
 | `--name SUFFIX` | String appended to the filename for new input file(s). | `QRC` |
 | `-f, --freq FREQ` | Displace along the normal mode nearest this frequency (cm⁻¹); errors if no mode is within 1 cm⁻¹. | All imaginary |
 | `--freqnum FREQNUM` | Displace along frequency number N (from lowest); errors if N exceeds the number of modes. | All imaginary |
+| `--both` | Write two inputs, displaced by `+AMPLITUDE` and `-AMPLITUDE`, with `F` and `R` appended to the name (`<filename>_QRCF`, `<filename>_QRCR`). | Disabled |
+| `--xyz` | Write the displaced geometry as an `.xyz` file instead of an input file. | Disabled |
 | `--qcoord` | **Deprecated, removal in 3.0.** Runs Gaussian single points along normal modes directly on the local machine (requires `g16` on `PATH`). Generate inputs with the default mode and submit them through your scheduler instead. | Disabled |
 | `--nummodes NUMMODES` | **Deprecated, removal in 3.0.** Number of modes for `--qcoord` calculations. | `all` |
 
@@ -91,11 +96,20 @@ python -m pyqrc [options] <output_file(s)>
 pyQRC generates the following files:
 
 - **`<filename>_QRC.com`** (Gaussian) or **`<filename>_QRC.inp`** (ORCA/Q-Chem): New input file with displaced geometry ready for optimization.
+- **`<filename>_QRC.xyz`**: Displaced geometry, written instead of an input file with `--xyz`, or for outputs from other programs that cclib reads (e.g. Psi4, NWChem, Turbomole) since pyQRC cannot write their inputs.
 - **`<filename>_QRC.qrc`**: Summary file containing:
   - Original geometry
   - Harmonic frequencies, reduced masses, and force constants
   - Normal mode displacement vectors
   - Mass-weighted Cartesian displacement magnitude
+
+### New input files
+
+Unless `--route` is given, the new input repeats the original calculation but is set up to optimize to a minimum, so that a QRC from a transition state relaxes to the reactant or product instead of searching for the TS again. A note is printed whenever the route is changed:
+
+- **Gaussian:** `ts`, `saddle=N`, `qst2`/`qst3`, `noeigentest` and `readfc` are removed from the `opt` options, and `guess=read` is removed (the new job has no checkpoint to read). `opt` is added to a frequency-only route. Input that follows the geometry — `Gen`/`GenECP` basis sets and ECPs, ModRedundant lines, `SCRF=Read` input — is not in the Gaussian output, so it is copied from the original input file, `<filename>.com` or `<filename>.gjf` next to the output, when that file has the same route. With `--route`, these sections are copied only if the new route needs them (e.g. it uses `Gen`). If the route needs such input and no matching file is found, pyQRC prints a warning so it can be added by hand.
+- **ORCA:** `OptTS` becomes `Opt` (and `Opt` is added if the job had no optimization). All `!` lines and `%` blocks (`%cpcm`, `%basis`, `%scf`, `%geom`, ...) are copied from the input that ORCA echoes at the top of the output; `%pal` and `%maxcore` come from `--nproc` and `--mem`. The `%` blocks are also copied when `--route` is given.
+- **Q-Chem:** an optimization followed by a frequency job, both with every `$rem` setting and extra section (`$smx`, `$solvent`, `$basis`, ...) of the original frequency job, taken from the input Q-Chem echoes in its output.
 
 ## Dependencies
 
@@ -122,11 +136,10 @@ This initial optimization inadvertently produced a transition structure. The cod
 ### Example 2: Map a Reaction Coordinate (QRC)
 
 ```bash
-python -m pyqrc claisen_ts.log --nproc 4 --mem 8GB --amp 0.3 --name QRCF
-python -m pyqrc claisen_ts.log --nproc 4 --mem 8GB --amp -0.3 --name QRCR
+python -m pyqrc claisen_ts.log --nproc 4 --mem 8GB --both
 ```
 
-The initial optimization located a transition structure. The quick reaction coordinate (QRC) is obtained from two optimizations, started from two points displaced along the reaction coordinate in either direction.
+The initial optimization located a transition structure. The quick reaction coordinate (QRC) is obtained from two optimizations, started from two points displaced along the reaction coordinate in either direction: `--both` writes `claisen_ts_QRCF.com` (`--amp 0.3`) and `claisen_ts_QRCR.com` (`--amp -0.3`). The original job was a TS optimization, `opt(ts,calcfc,noeigentest)`, so the new inputs use `opt=calcfc` to relax to the minima on either side. The same two files can be written separately with `--amp 0.3 --name QRCF` and `--amp -0.3 --name QRCR`.
 
 ### Example 3: Conformational Sampling via Normal Mode Displacement
 
