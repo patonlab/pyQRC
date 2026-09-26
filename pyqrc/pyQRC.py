@@ -14,6 +14,7 @@ __version__ = '2.3.0'
 __author__ = 'Robert Paton'
 __email__ = 'robert.paton@colostate.edu'
 
+import logging
 import os
 import re
 import shutil
@@ -27,6 +28,8 @@ from typing import Optional, Generator
 
 import cclib
 import numpy as np
+
+from pyqrc.orca_reader import ORCAReadError, is_orca_output, read_orca_frequencies
 
 
 # Messages already shown for the file main() is processing (None outside main)
@@ -48,6 +51,50 @@ class QRCParseError(Exception):
 
 class QRCModeError(Exception):
     """Raised when a requested normal mode or frequency cannot be matched."""
+
+
+def parse_output(file: str):
+    """Parse a frequency calculation with cclib.
+
+    ORCA outputs that cclib cannot read (cclib releases up to 1.8.1 fail on
+    ORCA 6) are read with pyQRC's own ORCA reader instead.
+
+    Args:
+        file: Path to the output file.
+
+    Returns:
+        A cclib data object (or an object with the same attributes), or
+        None if cclib does not recognize the format.
+
+    Raises:
+        QRCParseError: If an ORCA output cannot be read by either parser.
+        Exception: Whatever cclib raises for other formats.
+    """
+    try:
+        orca = is_orca_output(file)
+    except OSError:
+        orca = False
+    try:
+        # cclib logs its own parse errors; for ORCA the fallback may succeed
+        parser = cclib.io.ccopen(file, loglevel=logging.CRITICAL) if orca else cclib.io.ccopen(file)
+        if parser is None and not orca:
+            return None
+        if parser is not None:
+            data = parser.parse()
+            if not orca or hasattr(data, 'vibdisps'):
+                return data
+        cclib_error = 'no normal modes found'
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        if not orca:
+            raise
+        cclib_error = str(exc) or type(exc).__name__
+    try:
+        return read_orca_frequencies(file)
+    except ORCAReadError as exc:
+        raise QRCParseError(
+            f"could not read ORCA output '{file}' (cclib: {cclib_error}; "
+            f"pyQRC ORCA reader: {exc})"
+        ) from exc
 
 
 @contextmanager
@@ -791,20 +838,19 @@ class QRCGenerator:
                 parsing fails.
         """
         try:
-            parser = cclib.io.ccopen(self.file)
-            if parser is None:
-                raise QRCParseError(
-                    f"Could not determine file format for '{self.file}'. "
-                    "Ensure it is a valid Gaussian, ORCA, or Q-Chem output file."
-                )
-            data = parser.parse()
+            data = parse_output(self.file)
+        except QRCParseError:
+            raise
         except Exception as exc:
-            if isinstance(exc, QRCParseError):
-                raise
             raise QRCParseError(
                 f"Failed to parse '{self.file}': {exc}. "
                 "The file may be corrupted or from an unsupported format."
             ) from exc
+        if data is None:
+            raise QRCParseError(
+                f"Could not determine file format for '{self.file}'. "
+                "Ensure it is a valid Gaussian, ORCA, or Q-Chem output file."
+            )
 
         self.NATOMS = data.natom
         self.CHARGE = data.charge
@@ -1299,16 +1345,15 @@ def main() -> int:
                 continue
             files.append(file)
     for file in files:
-        # Parse output with cclib and count imaginary frequencies
+        # Parse output and count imaginary frequencies
         try:
-            parser_cc = cclib.io.ccopen(file)
-            if parser_cc is None:
-                print(f'x   {file} could not be parsed (unknown format): skipping')
-                exit_code = 1
-                continue
-            data = parser_cc.parse()
+            data = parse_output(file)
         except Exception as exc:
             print(f'x   {file} failed to parse: {exc}')
+            exit_code = 1
+            continue
+        if data is None:
+            print(f'x   {file} could not be parsed (unknown format): skipping')
             exit_code = 1
             continue
 

@@ -27,7 +27,7 @@ unless overridden; tasks below assume them.
 | D4 | `--freq` matching semantics | **Nearest mode within ±1 cm⁻¹ (configurable), print the matched mode; no match → error, no file, exit 1.** Release as **v2.2.0** with a release note. | Frequencies are reported to ~0.1 cm⁻¹; exact float equality can never be the intended UX. Previously "successful" no-op runs becoming errors is the point of the fix. |
 | D5 | Python 3.13 support | **Yes — add 3.13 to both CI matrices and the classifiers.** | Pure-Python package; local development already happens on 3.13; risk is in cclib, which CI will reveal. |
 
-Note (D3): per the README "ORCA 6 compatibility" section, cclib 1.8.1 is incompatible with ORCA 6 parsing, so ORCA 6 support is excluded until a fixed cclib release is published.
+Note (D3): cclib 1.8.1 cannot parse ORCA 6 outputs. Since September 2026 pyQRC falls back to its own ORCA reader (`pyqrc/orca_reader.py`) when cclib fails on an ORCA file, so ORCA 6 is supported on released cclib and the ORCA 6 examples are tested fixtures. A weekly GitHub Actions job (`cclib-master.yml`) runs the suite against cclib master to catch upstream changes early.
 
 ---
 

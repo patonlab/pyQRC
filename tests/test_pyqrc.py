@@ -4,12 +4,13 @@
 import os
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
 import pytest
 
-from tests.conftest import QCHEM_DEV_CCLIB_SKIP
+from tests.conftest import QCHEM_DEV_CCLIB_SKIP, datapath
 from pyqrc.pyQRC import (
     ATOMIC_MASSES,
     COVALENT_RADII,
@@ -2255,3 +2256,160 @@ class TestCLIConveniences:
         monkeypatch.setattr('sys.argv', ['pyqrc', str(g16_claisen_ts), '--amp', '5', '-q'])
         main()
         assert 'atoms are very close' in capsys.readouterr().out
+
+
+# --- ORCA reader (fallback for ORCA outputs cclib cannot read, e.g. ORCA 6) ---
+
+import logging  # noqa: E402  pylint: disable=wrong-import-position,wrong-import-order
+import cclib  # noqa: E402  pylint: disable=wrong-import-position,wrong-import-order
+
+from pyqrc.orca_reader import (  # noqa: E402  pylint: disable=wrong-import-position
+    ORCAReadError,
+    is_orca_output,
+    read_orca_frequencies,
+)
+from pyqrc.pyQRC import parse_output  # noqa: E402  pylint: disable=wrong-import-position
+
+# Reference values from cclib master, which can read ORCA 6
+ORCA6_REFERENCE = {
+    'acetaldehyde': dict(natom=7, nvib=15, first=-190.74, last=3174.51,
+                         disp=[-3.5e-05, 0.000184, -0.093569], coord=[0.236194, 0.411275, 0.001351]),
+    'claisen_ts': dict(natom=14, nvib=36, first=-636.62, last=3280.48,
+                       disp=[0.368031, 0.185735, 0.076536], coord=[-1.409443, 0.796601, -0.282714]),
+    'full_alkyne_TS': dict(natom=130, nvib=384, first=-105.42, last=3258.79,
+                           disp=[0.005891, -0.008512, -0.000255], coord=[0.515094, -0.787338, 14.336678]),
+}
+
+
+def _truncate(src, dest, marker):
+    """Copy an output, cutting it at the first line containing marker."""
+    lines = Path(src).read_text().splitlines(keepends=True)
+    cut = next(i for i, line in enumerate(lines) if marker in line)
+    Path(dest).write_text(''.join(lines[:cut]))
+    return dest
+
+
+class TestORCAReader:
+    """pyQRC's ORCA reader agrees with cclib and reads ORCA 6."""
+
+    @pytest.mark.parametrize('name', ['acetaldehyde', 'claisen_ts'])
+    def test_matches_cclib_on_orca5(self, name):
+        """On ORCA 5 outputs, which cclib releases read, both parsers agree."""
+        path = str(datapath(f'orca5/{name}.out'))
+        ours = read_orca_frequencies(path)
+        ref = cclib.io.ccopen(path, loglevel=logging.CRITICAL).parse()
+        assert ours.natom == ref.natom
+        assert list(ours.atomnos) == list(ref.atomnos)
+        assert (ours.charge, ours.mult) == (ref.charge, ref.mult)
+        np.testing.assert_allclose(ours.atomcoords[-1], ref.atomcoords[-1])
+        np.testing.assert_allclose(ours.vibfreqs, ref.vibfreqs, atol=0.01)
+        np.testing.assert_allclose(ours.vibdisps, ref.vibdisps)
+
+    @pytest.mark.parametrize('name', sorted(ORCA6_REFERENCE))
+    def test_reads_orca6(self, name):
+        ref = ORCA6_REFERENCE[name]
+        data = read_orca_frequencies(str(datapath(f'orca6/{name}.out')))
+        assert data.natom == ref['natom'] and (data.charge, data.mult) == (0, 1)
+        assert len(data.vibfreqs) == ref['nvib'] == 3 * ref['natom'] - 6
+        assert data.vibfreqs[0] == pytest.approx(ref['first'])
+        assert data.vibfreqs[-1] == pytest.approx(ref['last'])
+        assert data.vibdisps.shape == (ref['nvib'], ref['natom'], 3)
+        np.testing.assert_allclose(data.vibdisps[0][0], ref['disp'])
+        np.testing.assert_allclose(data.atomcoords[-1][0], ref['coord'])
+        assert data.metadata['package'] == 'ORCA'
+        assert data.metadata['package_version'].startswith('6.')
+
+    @pytest.mark.parametrize('name', sorted(ORCA6_REFERENCE))
+    def test_parse_output_reads_orca6(self, name, capfd):
+        """parse_output gives the same data whichever cclib is installed, quietly."""
+        data = parse_output(str(datapath(f'orca6/{name}.out')))
+        assert len(data.vibfreqs) == ORCA6_REFERENCE[name]['nvib']
+        assert data.vibfreqs[0] == pytest.approx(ORCA6_REFERENCE[name]['first'], abs=0.01)
+        # cclib's own error log is silenced when the fallback takes over
+        assert 'ERROR' not in capfd.readouterr().err
+
+    def test_fallback_when_cclib_raises(self, orca_claisen_ts):
+        class FailingParser:
+            def parse(self):
+                raise IndexError('list index out of range')
+
+        with patch('pyqrc.pyQRC.cclib.io.ccopen', return_value=FailingParser()):
+            data = parse_output(str(orca_claisen_ts))
+        assert isinstance(data, SimpleNamespace)
+        assert data.vibfreqs[0] == pytest.approx(-633.34, abs=0.01)
+
+    def test_fallback_when_cclib_finds_no_modes(self, orca_claisen_ts):
+        class NoModesParser:
+            def parse(self):
+                return SimpleNamespace(natom=14)
+
+        with patch('pyqrc.pyQRC.cclib.io.ccopen', return_value=NoModesParser()):
+            data = parse_output(str(orca_claisen_ts))
+        assert data.vibdisps.shape == (36, 14, 3)
+
+    def test_cclib_preferred_when_it_works(self, orca_claisen_ts):
+        assert not isinstance(parse_output(str(orca_claisen_ts)), SimpleNamespace)
+
+    def test_non_orca_errors_not_hidden(self, g16_claisen_ts):
+        class FailingParser:
+            def parse(self):
+                raise ValueError('bad gaussian')
+
+        with patch('pyqrc.pyQRC.cclib.io.ccopen', return_value=FailingParser()):
+            with pytest.raises(ValueError, match='bad gaussian'):
+                parse_output(str(g16_claisen_ts))
+
+    def test_truncated_orca_output_raises(self, orca6_claisen_ts, tmp_path):
+        """An output that stops before the normal modes is a clear parse error."""
+        path = _truncate(orca6_claisen_ts, tmp_path / 'cut.out', 'NORMAL MODES')
+        with pytest.raises(ORCAReadError, match='no frequency calculation'):
+            read_orca_frequencies(str(path))
+        with patch('pyqrc.pyQRC.cclib.io.ccopen', side_effect=IndexError('boom')):
+            with pytest.raises(QRCParseError, match='pyQRC ORCA reader'):
+                parse_output(str(path))
+
+    def test_no_frequency_job(self, orca6_claisen_ts, tmp_path):
+        path = _truncate(orca6_claisen_ts, tmp_path / 'opt.out', 'VIBRATIONAL FREQUENCIES')
+        with pytest.raises(ORCAReadError):
+            read_orca_frequencies(str(path))
+
+    def test_without_first_vibration_line(self, orca_acetaldehyde, tmp_path):
+        """Falls back to dropping 6 translations/rotations for a non-linear molecule."""
+        text = orca_acetaldehyde.read_text()
+        path = tmp_path / 'nofirst.out'
+        path.write_text(text.replace('The first frequency considered to be a vibration', 'removed'))
+        np.testing.assert_allclose(read_orca_frequencies(str(path)).vibfreqs,
+                                   read_orca_frequencies(str(orca_acetaldehyde)).vibfreqs)
+
+    def test_is_orca_output(self, orca6_claisen_ts, g16_claisen_ts, qchem_claisen_ts):
+        assert is_orca_output(str(orca6_claisen_ts))
+        assert not is_orca_output(str(g16_claisen_ts))
+        assert not is_orca_output(str(qchem_claisen_ts))
+
+
+class TestORCA6EndToEnd:
+    """ORCA 6 outputs work through the CLI with any cclib."""
+
+    def test_cli_orca6_ts(self, orca6_claisen_ts, temp_workdir, monkeypatch, capsys):
+        monkeypatch.setattr('sys.argv', ['pyqrc', str(orca6_claisen_ts), '--both', '--nproc', '4', '--mem', '8GB'])
+        assert main() == 0
+        assert '1 imaginary frequencies: processed' in capsys.readouterr().out
+        for suffix in ('QRCF', 'QRCR'):
+            lines = (temp_workdir / f'claisen_ts_{suffix}.inp').read_text().splitlines()
+            assert lines[:3] == ['! wB97X-D3 def2-SVP Opt Freq', ' %pal nprocs 4 end', ' %maxcore 2048']
+            assert '* xyz 0 1' in lines
+        assert (temp_workdir / 'claisen_ts_QRCF.qrc').exists()
+
+    def test_orca6_displacement_along_imaginary_mode(self, orca6_claisen_ts, temp_workdir):
+        qrc = QRCGenerator(str(orca6_claisen_ts), 0.3, 1, '4GB', None, False, 'QRC', None, None)
+        displacement = qrc.NEW_CARTESIAN - qrc.CARTESIAN
+        np.testing.assert_allclose(displacement, 0.3 * qrc.DISPS[0])
+        assert qrc.MW_DISTANCE > 0
+
+    def test_orca61_large_ts(self, orca6_alkyne_ts, temp_workdir):
+        """ORCA 6.1, 130 atoms, lowercase optts keyword with RIJCOSX."""
+        QRCGenerator(str(orca6_alkyne_ts), 0.3, 8, '32GB', None, False, 'QRC', None, None)
+        lines = (temp_workdir / 'full_alkyne_TS_QRC.inp').read_text().splitlines()
+        assert lines[0] == '! Opt wb97x-d3 def2-svp rijcosx freq'
+        assert ' %maxcore 4096' in lines
+        assert sum(1 for line in lines if len(line.split()) == 4 and line.split()[0].isalpha()) == 130

@@ -56,14 +56,7 @@ Clone the repository https://github.com/patonlab/pyQRC.git and add to your PYTHO
 
 ### ORCA 6 compatibility
 
-Parsing ORCA 6 output files requires a newer cclib than the current PyPI release (1.8.1), which fails on ORCA 6's SCF block. Until cclib ships a release with the fix, install cclib from GitHub master alongside pyQRC:
-
-```bash
-pip install pyqrc
-pip install --upgrade 'git+https://github.com/cclib/cclib.git'
-```
-
-Note: cclib master currently has a regression affecting some Q-Chem outputs. If you primarily use Q-Chem, stay on cclib 1.8.1.
+ORCA 6 outputs work with a plain `pip install pyqrc`. The current cclib release (1.8.1) cannot read ORCA 6 outputs, so pyQRC reads ORCA files that cclib fails on with its own ORCA reader, which extracts the final geometry, charge, multiplicity, frequencies and normal modes. It gives identical results to cclib on ORCA 5 outputs and to cclib's development version on ORCA 6 outputs, and cclib is still used whenever it can read the file.
 
 Then run the script as a Python module with your computational chemistry output files (the program expects `.log` or `.out` extensions, in any case) and can accept wildcard arguments.
 
@@ -114,7 +107,7 @@ Unless `--route` is given, the new input repeats the original calculation but is
 ## Dependencies
 
 - [Python](https://www.python.org/) >= 3.9
-- [cclib](https://cclib.github.io/) >= 1.8.1, < 2 (ORCA 6 outputs need a newer cclib than 1.8.1 — see "ORCA 6 compatibility" above)
+- [cclib](https://cclib.github.io/) >= 1.8.1, < 2 (ORCA 6 outputs are read by pyQRC's own ORCA reader — see "ORCA 6 compatibility" above)
 - [NumPy](https://numpy.org/) >= 1.22
 - One of the following computational chemistry packages:
   - [Gaussian09](https://gaussian.com/glossary/g09/) / [Gaussian16](https://gaussian.com/gaussian16/)
