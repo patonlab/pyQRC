@@ -2413,3 +2413,256 @@ class TestORCA6EndToEnd:
         assert lines[0] == '! Opt wb97x-d3 def2-svp rijcosx freq'
         assert ' %maxcore 4096' in lines
         assert sum(1 for line in lines if len(line.split()) == 4 and line.split()[0].isalpha()) == 130
+
+
+# --- Phase 2: minima skipped, --outdir/--overwrite, from_arrays/from_ase ---
+
+from pyqrc.pyQRC import (  # noqa: E402  pylint: disable=wrong-import-position
+    QRCFileExistsError,
+    vibrations_from_ase,
+)
+
+MINIMUM_LOG = datapath('g16/planar_chex_mode1.log')  # no imaginary frequencies
+
+
+class TestSkipMinima:
+    """Files without imaginary frequencies are skipped unless a mode is requested."""
+
+    def test_minimum_skipped_by_default(self, temp_workdir, monkeypatch, capsys):
+        monkeypatch.setattr('sys.argv', ['pyqrc', str(MINIMUM_LOG)])
+        assert main() == 0
+        out = capsys.readouterr().out
+        assert 'no imaginary frequencies: skipping' in out and '--freqnum' in out
+        assert not list(temp_workdir.iterdir())
+
+    def test_minimum_with_freqnum_processed(self, temp_workdir, monkeypatch):
+        monkeypatch.setattr('sys.argv', ['pyqrc', str(MINIMUM_LOG), '--freqnum', '1', '-q'])
+        assert main() == 0
+        assert (temp_workdir / 'planar_chex_mode1_QRC.com').exists()
+
+    def test_auto_still_skips_with_freqnum(self, temp_workdir, monkeypatch, capsys):
+        monkeypatch.setattr('sys.argv', ['pyqrc', str(MINIMUM_LOG), '--auto', '--freqnum', '1'])
+        assert main() == 0
+        assert 'skipping' in capsys.readouterr().out
+        assert not list(temp_workdir.iterdir())
+
+    def test_library_warns_when_not_displaced(self, temp_workdir, capsys):
+        qrc = QRCGenerator(str(MINIMUM_LOG), 0.3, 1, '4GB', None, False, 'QRC', None, None)
+        np.testing.assert_allclose(qrc.NEW_CARTESIAN, qrc.CARTESIAN)
+        assert 'geometry was not displaced' in capsys.readouterr().out
+
+
+class TestOutdir:
+    """--outdir writes all files into a (new) directory."""
+
+    def test_cli_outdir(self, g16_claisen_ts, temp_workdir, monkeypatch):
+        monkeypatch.setattr('sys.argv', ['pyqrc', str(g16_claisen_ts), '--outdir', 'a/b', '--both'])
+        assert main() == 0
+        written = sorted(p.name for p in (temp_workdir / 'a' / 'b').iterdir())
+        assert written == ['claisen_ts_QRCF.com', 'claisen_ts_QRCF.qrc', 'claisen_ts_QRCR.com', 'claisen_ts_QRCR.qrc']
+        assert sorted(p.name for p in temp_workdir.iterdir()) == ['a']
+        # The checkpoint is named for the job, which runs wherever it is submitted
+        assert (temp_workdir / 'a/b/claisen_ts_QRCF.com').read_text().startswith('%chk=claisen_ts_QRCF.chk\n')
+
+    def test_output_paths_match_written_files(self, orca_claisen_ts, tmp_path):
+        qrc = QRCGenerator(str(orca_claisen_ts), 0.3, 1, '4GB', None, True, 'X', None, None,
+                           write=False, outdir=str(tmp_path / 'o'))
+        paths = qrc.output_paths()
+        assert [p.name for p in paths] == ['claisen_ts_X.inp', 'claisen_ts_X.qrc']
+        qrc.write_files()
+        assert all(p.exists() for p in paths)
+        assert sorted(p.name for p in (tmp_path / 'o').iterdir()) == sorted(p.name for p in paths)
+
+    def test_output_paths_xyz(self, g16_claisen_ts, tmp_path):
+        qrc = QRCGenerator(str(g16_claisen_ts), 0.3, 1, '4GB', None, False, 'QRC', None, None,
+                           write=False, xyz=True, outdir=str(tmp_path))
+        assert [p.name for p in qrc.output_paths()] == ['claisen_ts_QRC.xyz']
+
+
+class TestOverwrite:
+    """The CLI never replaces existing files unless --overwrite is given."""
+
+    def test_second_run_refused(self, g16_claisen_ts, temp_workdir, monkeypatch, capsys):
+        monkeypatch.setattr('sys.argv', ['pyqrc', str(g16_claisen_ts), '-q'])
+        assert main() == 0
+        target = temp_workdir / 'claisen_ts_QRC.com'
+        target.write_text('edited by hand')
+        assert main() == 1
+        assert 'already exists' in capsys.readouterr().out
+        assert target.read_text() == 'edited by hand'
+
+    def test_both_writes_nothing_if_one_exists(self, g16_claisen_ts, temp_workdir, monkeypatch):
+        (temp_workdir / 'claisen_ts_QRCR.com').write_text('keep')
+        monkeypatch.setattr('sys.argv', ['pyqrc', str(g16_claisen_ts), '--both'])
+        assert main() == 1
+        assert sorted(p.name for p in temp_workdir.iterdir()) == ['claisen_ts_QRCR.com']
+
+    def test_existing_qrc_summary_also_protected(self, g16_claisen_ts, temp_workdir, monkeypatch):
+        (temp_workdir / 'claisen_ts_QRC.qrc').write_text('keep')
+        monkeypatch.setattr('sys.argv', ['pyqrc', str(g16_claisen_ts)])
+        assert main() == 1
+        assert not (temp_workdir / 'claisen_ts_QRC.com').exists()
+
+    def test_overwrite_flag(self, g16_claisen_ts, temp_workdir, monkeypatch):
+        target = temp_workdir / 'claisen_ts_QRC.com'
+        target.write_text('old')
+        monkeypatch.setattr('sys.argv', ['pyqrc', str(g16_claisen_ts), '--overwrite', '-q'])
+        assert main() == 0
+        assert target.read_text().startswith('%chk=')
+
+    def test_library_default_overwrites(self, g16_claisen_ts, temp_workdir):
+        (temp_workdir / 'claisen_ts_QRC.com').write_text('old')
+        QRCGenerator(str(g16_claisen_ts), 0.3, 1, '4GB', None, False, 'QRC', None, None)
+        assert (temp_workdir / 'claisen_ts_QRC.com').read_text().startswith('%chk=')
+
+    def test_library_overwrite_false_raises_before_writing(self, g16_claisen_ts, temp_workdir):
+        (temp_workdir / 'claisen_ts_QRC.com').write_text('old')
+        with pytest.raises(QRCFileExistsError):
+            QRCGenerator(str(g16_claisen_ts), 0.3, 1, '4GB', None, True, 'QRC', None, None,
+                         overwrite=False)
+        assert not (temp_workdir / 'claisen_ts_QRC.qrc').exists()
+        assert (temp_workdir / 'claisen_ts_QRC.com').read_text() == 'old'
+
+
+class TestFromArrays:
+    """QRCGenerator.from_arrays gives the same result as reading an output file."""
+
+    @pytest.fixture
+    def orca_data(self, orca_claisen_ts):
+        return parse_output(str(orca_claisen_ts))
+
+    def test_matches_file_based_generator(self, orca_claisen_ts, orca_data, temp_workdir):
+        from_file = QRCGenerator(str(orca_claisen_ts), 0.3, 1, '4GB', None, False, 'QRC', None, None,
+                                 write=False)
+        from_arrays = QRCGenerator.from_arrays(
+            orca_data.atomnos, orca_data.atomcoords[-1], orca_data.vibfreqs, orca_data.vibdisps)
+        # ORCA prints unit-norm modes to 6 decimals
+        np.testing.assert_allclose(from_arrays.NEW_CARTESIAN, from_file.NEW_CARTESIAN, atol=1e-5)
+        assert from_arrays._target_modes == from_file._target_modes == {0}
+        assert from_arrays.MW_DISTANCE == pytest.approx(from_file.MW_DISTANCE, rel=1e-4)
+        assert not list(temp_workdir.iterdir()), "from_arrays must not write by default"
+
+    def test_modes_are_normalized(self, orca_data):
+        base = QRCGenerator.from_arrays(orca_data.atomnos, orca_data.atomcoords[-1],
+                                        orca_data.vibfreqs, orca_data.vibdisps)
+        scaled = QRCGenerator.from_arrays(orca_data.atomnos, orca_data.atomcoords[-1],
+                                          orca_data.vibfreqs, 25.0 * orca_data.vibdisps)
+        np.testing.assert_allclose(scaled.NEW_CARTESIAN, base.NEW_CARTESIAN)
+
+    def test_mode_selection_and_negative_amplitude(self, orca_data):
+        args = (orca_data.atomnos, orca_data.atomcoords[-1], orca_data.vibfreqs, orca_data.vibdisps)
+        fwd = QRCGenerator.from_arrays(*args, amplitude=0.3, num=5)
+        rev = QRCGenerator.from_arrays(*args, amplitude=-0.3, val=orca_data.vibfreqs[4])
+        assert fwd._target_modes == rev._target_modes == {4}
+        np.testing.assert_allclose(fwd.NEW_CARTESIAN - fwd.CARTESIAN, rev.CARTESIAN - rev.NEW_CARTESIAN)
+
+    def test_write_xyz(self, orca_data, tmp_path):
+        qrc = QRCGenerator.from_arrays(orca_data.atomnos, orca_data.atomcoords[-1], orca_data.vibfreqs,
+                                       orca_data.vibdisps, name='mlip_ts', outdir=str(tmp_path), write=True)
+        lines = (tmp_path / 'mlip_ts_QRC.xyz').read_text().splitlines()
+        assert int(lines[0]) == 14 and len(lines) == 16
+        np.testing.assert_allclose([float(x) for x in lines[2].split()[1:]], qrc.NEW_CARTESIAN[0], atol=1e-7)
+
+    def test_write_gaussian_with_route(self, orca_data, tmp_path):
+        QRCGenerator.from_arrays(orca_data.atomnos, orca_data.atomcoords[-1], orca_data.vibfreqs,
+                                 orca_data.vibdisps, name='ts', program='Gaussian', charge=-1, mult=2,
+                                 route='opt=(ts,calcfc) b3lyp/6-31g(d)', outdir=str(tmp_path), write=True)
+        lines = (tmp_path / 'ts_QRC.com').read_text().splitlines()
+        assert lines[3] == '# opt=(ts,calcfc) b3lyp/6-31g(d)'  # used as given
+        assert lines[7] == '-1 2'
+
+    def test_write_orca_with_route(self, orca_data, tmp_path):
+        QRCGenerator.from_arrays(orca_data.atomnos, orca_data.atomcoords[-1], orca_data.vibfreqs,
+                                 orca_data.vibdisps, name='ts', program='ORCA', route='r2SCAN-3c Opt',
+                                 nproc=4, mem='8GB', outdir=str(tmp_path), write=True)
+        lines = (tmp_path / 'ts_QRC.inp').read_text().splitlines()
+        assert lines[:3] == ['! r2SCAN-3c Opt', ' %pal nprocs 4 end', ' %maxcore 2048']
+
+    @pytest.mark.parametrize('change,match', [
+        (dict(coords=np.zeros((13, 3))), 'coords must have shape'),
+        (dict(modes=np.ones((3, 14, 3))), 'modes must have shape'),
+        (dict(atomnos=[0] * 14), 'atomic numbers'),
+        (dict(program='QChem', route='x'), 'program must be'),
+        (dict(program='Gaussian'), 'a route is needed'),
+        (dict(modes='zero'), 'all-zero'),
+    ])
+    def test_validation(self, orca_data, change, match):
+        kwargs = dict(atomnos=orca_data.atomnos, coords=orca_data.atomcoords[-1],
+                      freqs=orca_data.vibfreqs, modes=orca_data.vibdisps)
+        kwargs.update(change)
+        if isinstance(kwargs['modes'], str):
+            kwargs['modes'] = np.zeros_like(orca_data.vibdisps)
+        with pytest.raises(ValueError, match=match):
+            QRCGenerator.from_arrays(**kwargs)
+
+
+class FakeAtoms:
+    """Just enough of ase.Atoms for from_ase."""
+
+    def get_atomic_numbers(self):
+        return np.array([8, 1, 1])
+
+    def get_positions(self):
+        return np.array([[0.0, 0.0, 0.119], [0.0, 0.763, -0.477], [0.0, -0.763, -0.477]])
+
+    def get_initial_charges(self):
+        return np.array([-1.0, 0.0, 0.0])
+
+
+class FakeVibrations:
+    """Just enough of ase.vibrations.Vibrations for from_ase: 9 modes, 6 trans/rot."""
+
+    atoms = FakeAtoms()
+
+    def get_energies(self):
+        # eV; 0.062j ~ 500i cm-1; tiny values are trans/rot noise
+        return np.array([1e-5j, 2e-6j, 1e-6, 2e-6, 3e-6, 4e-6, 0.062j, 0.1984, 0.4587])
+
+    def get_mode(self, i):
+        mode = np.zeros((3, 3))
+        mode[i % 3, i % 3] = 2.0 + i
+        return mode
+
+
+class TestFromAse:
+    """from_ase works on an ASE Vibrations object (ASE is not a dependency)."""
+
+    def test_vibrations_from_ase(self):
+        freqs, modes = vibrations_from_ase(FakeVibrations())
+        np.testing.assert_allclose(freqs, [-500.06, 1600.2, 3699.7], atol=0.1)
+        assert modes.shape == (3, 3, 3)
+
+    def test_from_ase(self):
+        qrc = QRCGenerator.from_ase(FakeVibrations(), amplitude=0.3)
+        assert qrc.CHARGE == -1 and qrc.MULT == 1
+        assert qrc._target_modes == {0}
+        expected = FakeAtoms().get_positions()
+        expected[0, 0] += 0.3  # mode 6 is a unit x-displacement of atom 0
+        np.testing.assert_allclose(qrc.NEW_CARTESIAN, expected)
+
+    def test_from_ase_kwargs(self):
+        qrc = QRCGenerator.from_ase(FakeVibrations(), charge=0, num=2, amplitude=-0.1)
+        assert qrc.CHARGE == 0 and qrc._target_modes == {1}
+
+    def test_matches_ase2gaussian_route(self, temp_workdir):
+        """A real ASE Vibrations run gives the same geometry as the log-file bridge."""
+        ase = pytest.importorskip('ase')
+        from ase.calculators.emt import EMT  # pylint: disable=import-outside-toplevel
+        from ase.vibrations import Vibrations  # pylint: disable=import-outside-toplevel
+        import importlib.util  # pylint: disable=import-outside-toplevel
+        from tests.conftest import EXAMPLES_PATH  # pylint: disable=import-outside-toplevel
+        spec = importlib.util.spec_from_file_location('ase2gaussian', EXAMPLES_PATH / 'ase_mlip' / 'ase2gaussian.py')
+        ase2gaussian = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(ase2gaussian)
+
+        atoms = ase.Atoms('NH3', positions=[[0, 0, 0.1], [1.0, 0, 0], [-0.5, 0.87, 0], [-0.5, -0.87, 0]])
+        atoms.calc = EMT()
+        vib = Vibrations(atoms, name=str(temp_workdir / 'vib'))
+        vib.run()
+        freqs, modes = ase2gaussian.extract_vibrations(vib)
+        ase2gaussian.write_gaussian_freq_log('bridge.log', atoms, freqs, modes)
+        via_log = QRCGenerator('bridge.log', 0.3, 1, '4GB', None, False, 'QRC', None, 1, write=False)
+        direct = QRCGenerator.from_ase(vib, amplitude=0.3, num=1)
+        np.testing.assert_allclose(direct.FREQS, via_log.FREQS, atol=1e-3)
+        # The log stores displacements to 2 decimals
+        np.testing.assert_allclose(direct.NEW_CARTESIAN, via_log.NEW_CARTESIAN, atol=0.3 * 0.006)

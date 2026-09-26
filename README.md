@@ -75,18 +75,20 @@ python -m pyqrc [options] <output_file(s)>
 | `--mem MEM` | Total memory requested in the new input file, e.g. `8GB` or `4000MB` (case-insensitive). For ORCA this is divided by `--nproc` to give `%maxcore`, which is per core. | `4GB` |
 | `--route ROUTE` | Route line (Gaussian) or `!` keywords (ORCA) for the new calculation, used exactly as given, e.g. `'THEORY/BASIS opt'`. Ignored for Q-Chem. | Original, changed to a minimization |
 | `-q, --quiet` | Suppress verbose output (skips the `.qrc` summary file). | Verbose by default |
-| `--auto` | Only process files with imaginary frequencies, skip others. | Disabled |
+| `--auto` | Skip files without imaginary frequencies even when `--freq`/`--freqnum` is given. Without those options, such files are always skipped. | Disabled |
 | `--name SUFFIX` | String appended to the filename for new input file(s). | `QRC` |
 | `-f, --freq FREQ` | Displace along the normal mode nearest this frequency (cm⁻¹); errors if no mode is within 1 cm⁻¹. | All imaginary |
 | `--freqnum FREQNUM` | Displace along frequency number N (from lowest); errors if N exceeds the number of modes. | All imaginary |
 | `--both` | Write two inputs, displaced by `+AMPLITUDE` and `-AMPLITUDE`, with `F` and `R` appended to the name (`<filename>_QRCF`, `<filename>_QRCR`). | Disabled |
 | `--xyz` | Write the displaced geometry as an `.xyz` file instead of an input file. | Disabled |
+| `--outdir DIR` | Directory for the new files, created if needed. | Current directory |
+| `--overwrite` | Replace existing files. Without it, a file whose outputs (any of them, with `--both`) already exist is skipped with an error, and nothing is written for it. | Disabled |
 | `--qcoord` | **Deprecated, removal in 3.0.** Runs Gaussian single points along normal modes directly on the local machine (requires `g16` on `PATH`). Generate inputs with the default mode and submit them through your scheduler instead. | Disabled |
 | `--nummodes NUMMODES` | **Deprecated, removal in 3.0.** Number of modes for `--qcoord` calculations. | `all` |
 
 ## Output Files
 
-pyQRC generates the following files:
+Files without imaginary frequencies are skipped unless `--freq` or `--freqnum` asks for a particular mode, since there is nothing to displace along. For each file processed, pyQRC generates the following in the current directory (or `--outdir`), and never replaces existing files unless `--overwrite` is given:
 
 - **`<filename>_QRC.com`** (Gaussian) or **`<filename>_QRC.inp`** (ORCA/Q-Chem): New input file with displaced geometry ready for optimization.
 - **`<filename>_QRC.xyz`**: Displaced geometry, written instead of an input file with `--xyz`, or for outputs from other programs that cclib reads (e.g. Psi4, NWChem, Turbomole) since pyQRC cannot write their inputs.
@@ -145,7 +147,31 @@ In this example, the initial optimization located a (3rd order) saddle point - p
 
 ### Example 4: QRC from an ASE / MLIP Frequency Calculation
 
-When the Hessian comes from a machine-learned interatomic potential driven through [ASE](https://wiki.fysik.dtu.dk/ase/) rather than a QM package, there is no output file for pyQRC to read. The helper script [`examples/ase_mlip/ase2gaussian.py`](examples/ase_mlip/ase2gaussian.py) bridges the gap: it writes an ASE `Vibrations` result as a Gaussian-format log file that cclib parses, after which pyQRC works exactly as in the examples above. The accompanying [notebook](examples/ase_mlip/generate_qrc_inputs.ipynb) walks through the full loop with [MACE-OFF](https://github.com/ACEsuit/mace): locating the planar NH₃ inversion transition state and relaxing the QRC-displaced geometry to the pyramidal minimum, then mapping the Claisen reaction coordinate of Example 2 entirely on the MLIP — the forward and reverse QRC displacements from the DFT transition state relax to 4-pentenal and allyl vinyl ether without any further QM calculations.
+When the Hessian comes from a machine-learned interatomic potential driven through [ASE](https://wiki.fysik.dtu.dk/ase/) rather than a QM package, there is no output file for pyQRC to read. `QRCGenerator.from_ase` takes the ASE `Vibrations` object directly (see [Python API](#python-api)). To use the command line instead, the helper script [`examples/ase_mlip/ase2gaussian.py`](examples/ase_mlip/ase2gaussian.py) writes an ASE `Vibrations` result as a Gaussian-format log file that cclib parses, after which pyQRC works exactly as in the examples above. The accompanying [notebook](examples/ase_mlip/generate_qrc_inputs.ipynb) walks through the full loop with [MACE-OFF](https://github.com/ACEsuit/mace): locating the planar NH₃ inversion transition state and relaxing the QRC-displaced geometry to the pyramidal minimum, then mapping the Claisen reaction coordinate of Example 2 entirely on the MLIP — the forward and reverse QRC displacements from the DFT transition state relax to 4-pentenal and allyl vinyl ether without any further QM calculations.
+
+## Python API
+
+The command line wraps `QRCGenerator`, which can also be used directly:
+
+```python
+from pyqrc import QRCGenerator
+
+# From an output file; write=False computes without writing files
+qrc = QRCGenerator("claisen_ts.log", amplitude=0.3, nproc=4, mem="8GB", route=None,
+                   verbose=False, suffix="QRC", val=None, num=None, write=False)
+print(qrc.NEW_CARTESIAN)       # displaced geometry (Angstrom)
+print(qrc.output_paths())      # files write_files() would write
+qrc.write_files()
+
+# From arrays, e.g. frequencies from another program
+qrc = QRCGenerator.from_arrays(atomnos, coords, freqs, modes, amplitude=0.3)
+
+# From an ASE Vibrations run (ASE is not a pyQRC dependency)
+qrc = QRCGenerator.from_ase(vib, amplitude=0.3)
+atoms.positions = qrc.NEW_CARTESIAN
+```
+
+`from_arrays` takes atomic numbers, coordinates (Å), frequencies (cm⁻¹, negative for imaginary modes, without translations and rotations) and the matching Cartesian displacement vectors, which are normalized as Gaussian and ORCA print them, so amplitudes mean the same as for output files. It accepts the same `amplitude`, `num` and `val` as the file-based generator. By default it only computes; with `write=True` it writes an `.xyz` file, or a Gaussian or ORCA input when `program` and `route` are given. `from_ase` passes its keyword arguments on to `from_arrays`.
 
 ## Comparison with IRC
 

@@ -24,6 +24,7 @@ from argparse import ArgumentParser, ArgumentTypeError, Namespace
 from contextlib import contextmanager
 from glob import glob
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Optional, Generator
 
 import cclib
@@ -51,6 +52,10 @@ class QRCParseError(Exception):
 
 class QRCModeError(Exception):
     """Raised when a requested normal mode or frequency cannot be matched."""
+
+
+class QRCFileExistsError(FileExistsError):
+    """Raised when a file pyQRC would write already exists and overwrite is off."""
 
 
 def parse_output(file: str):
@@ -121,6 +126,7 @@ FREQ_MATCH_TOLERANCE = 1.0  # cm-1, for matching a user-requested --freq value
 DEFAULT_NPROC = 1
 DEFAULT_MEMORY = "4GB"
 DEFAULT_SUFFIX = "QRC"
+INPUT_EXTENSIONS = {"Gaussian": "com", "ORCA": "inp", "QChem": "inp"}
 
 # Periodic table of elements (index = atomic number)
 PERIODIC_TABLE = [
@@ -375,6 +381,35 @@ def mwdist(coords1: np.ndarray, coords2: np.ndarray, elements: list[int]) -> flo
         dist += ATOMIC_MASSES[atom] * (np.linalg.norm(coords1[n] - coords2[n])) ** 2
 
     return ANGSTROM_TO_BOHR * dist ** 0.5
+
+
+EV_TO_CM1 = 8065.54429
+
+
+def vibrations_from_ase(vib, min_freq: float = 100.0) -> tuple[np.ndarray, np.ndarray]:
+    """Extract true vibrations from an ase.vibrations.Vibrations run.
+
+    ASE returns all 3N modes, including translations/rotations with
+    near-zero frequencies, and reports imaginary modes as complex energies.
+    This returns signed wavenumbers (negative = imaginary) with those
+    near-zero modes dropped.
+
+    Args:
+        vib: A completed ase.vibrations.Vibrations object.
+        min_freq: Modes with |frequency| below this (cm-1) are discarded as
+            translations/rotations. Raise it if the structure is far from
+            stationary; lower it for floppy systems with genuine
+            low-frequency modes.
+
+    Returns:
+        (frequencies in cm-1, modes as an (M, N, 3) array).
+    """
+    energies = np.asarray(vib.get_energies())  # eV, complex for imaginary
+    wavenumbers = energies * EV_TO_CM1
+    freqs = np.where(np.abs(wavenumbers.imag) > 1e-6, -np.abs(wavenumbers.imag), wavenumbers.real)
+    modes = np.array([vib.get_mode(i) for i in range(len(freqs))])
+    keep = np.abs(freqs) > min_freq
+    return freqs[keep], modes[keep]
 
 
 def gen_overlap(mol_atoms: list[str], coords: np.ndarray, covfrac: float) -> np.ndarray:
@@ -795,7 +830,9 @@ class QRCGenerator:
         val: Optional[float],
         num: Optional[int],
         write: bool = True,
-        xyz: bool = False
+        xyz: bool = False,
+        outdir: Optional[str] = None,
+        overwrite: bool = True
     ):
         """Initialize QRC generator and create displaced structure.
 
@@ -813,22 +850,127 @@ class QRCGenerator:
                 the displaced geometry, e.g. for library use).
             xyz: Write an .xyz file of the displaced geometry instead of
                 an input file for the original program.
+            outdir: Directory for the new files (created if needed);
+                defaults to the current directory.
+            overwrite: Replace existing files. If False, write_files raises
+                QRCFileExistsError before writing anything.
         """
-        self.file = file
-        self.amplitude = amplitude
-        self.nproc = nproc
-        self.mem = mem
-        self.route = route
-        self.verbose = verbose
-        self.suffix = suffix
-        self.val = val
-        self.num = num
-        self.xyz = xyz
-
+        self._set_options(file, amplitude, nproc, mem, route, verbose, suffix,
+                          val, num, xyz, outdir, overwrite, from_file=True)
         self._parse()
         self.compute_displacement()
         if write:
             self.write_files()
+
+    @classmethod
+    def from_arrays(
+        cls,
+        atomnos,
+        coords,
+        freqs,
+        modes,
+        amplitude: float = DEFAULT_AMPLITUDE,
+        charge: int = 0,
+        mult: int = 1,
+        val: Optional[float] = None,
+        num: Optional[int] = None,
+        name: str = "qrc",
+        program: Optional[str] = None,
+        route: Optional[str] = None,
+        nproc: int = DEFAULT_NPROC,
+        mem: str = DEFAULT_MEMORY,
+        suffix: str = DEFAULT_SUFFIX,
+        verbose: bool = False,
+        outdir: Optional[str] = None,
+        overwrite: bool = True,
+        write: bool = False,
+    ) -> "QRCGenerator":
+        """Create a generator from arrays instead of an output file.
+
+        For frequencies computed outside a QM program, e.g. with ASE and a
+        machine-learned potential. Each mode is normalized to unit Cartesian
+        norm, as Gaussian and ORCA print them, so amplitudes mean the same
+        as for output files.
+
+        Args:
+            atomnos: Atomic numbers (N).
+            coords: Coordinates in Angstrom (N x 3).
+            freqs: Vibrational frequencies in cm-1, negative for imaginary
+                modes (M). Leave out translations and rotations.
+            modes: Cartesian displacements for each frequency (M x N x 3).
+            amplitude, val, num, nproc, mem, suffix, verbose, outdir,
+                overwrite: As for QRCGenerator.
+            charge: Molecular charge written to input files.
+            mult: Spin multiplicity written to input files.
+            name: Base name for files written (without extension).
+            program: "Gaussian" or "ORCA" to write an input file for that
+                program (needs route); None writes an .xyz file.
+            route: Gaussian route or ORCA '!' keywords, used as given.
+            write: Write files immediately (default False: only compute).
+
+        Returns:
+            The generator; NEW_CARTESIAN holds the displaced geometry.
+
+        Raises:
+            ValueError: If array shapes are inconsistent, or program is not
+                supported or lacks a route.
+        """
+        atomnos = np.asarray(atomnos, dtype=int).reshape(-1)
+        natoms = len(atomnos)
+        coords = np.asarray(coords, dtype=float)
+        freqs = np.asarray(freqs, dtype=float).reshape(-1)
+        modes = np.asarray(modes, dtype=float)
+        if coords.shape != (natoms, 3):
+            raise ValueError(f"coords must have shape ({natoms}, 3), got {coords.shape}")
+        if modes.shape != (len(freqs), natoms, 3):
+            raise ValueError(
+                f"modes must have shape ({len(freqs)}, {natoms}, 3) to match "
+                f"{len(freqs)} frequencies and {natoms} atoms, got {modes.shape}"
+            )
+        if np.any((atomnos < 1) | (atomnos >= len(PERIODIC_TABLE))):
+            raise ValueError("atomnos must be atomic numbers between 1 and 118")
+        if program not in (None, "Gaussian", "ORCA"):
+            raise ValueError("program must be 'Gaussian', 'ORCA' or None (for an .xyz file)")
+        if program is not None and not route:
+            raise ValueError(f"a route is needed to write a {program} input from arrays")
+        norms = np.linalg.norm(modes.reshape(len(freqs), -1), axis=1)
+        if np.any(norms == 0):
+            raise ValueError("modes must not contain all-zero displacement vectors")
+
+        qrc = cls.__new__(cls)
+        qrc._set_options(name, amplitude, nproc, mem, route, verbose, suffix, val, num,
+                         xyz=program is None, outdir=outdir, overwrite=overwrite, from_file=False)
+        qrc._set_data(SimpleNamespace(
+            natom=natoms, charge=charge, mult=mult, atomnos=atomnos,
+            atomcoords=[coords], vibfreqs=freqs, vibdisps=modes / norms[:, None, None],
+            metadata={'package': program},
+        ))
+        qrc.compute_displacement()
+        if write:
+            qrc.write_files()
+        return qrc
+
+    @classmethod
+    def from_ase(cls, vib, min_freq: float = 100.0, **kwargs) -> "QRCGenerator":
+        """Create a generator from a completed ase.vibrations.Vibrations run.
+
+        ASE is not a pyQRC dependency; this only calls methods of the object
+        passed in. Charge is taken from the atoms' initial charges unless
+        given.
+
+        Args:
+            vib: Completed ase.vibrations.Vibrations (vib.run() done).
+            min_freq: Modes with |frequency| below this (cm-1) are dropped as
+                translations/rotations (see vibrations_from_ase).
+            **kwargs: Passed to from_arrays (amplitude, num, program, ...).
+
+        Returns:
+            The generator; NEW_CARTESIAN holds the displaced geometry.
+        """
+        atoms = vib.atoms
+        freqs, modes = vibrations_from_ase(vib, min_freq)
+        kwargs.setdefault("charge", int(round(float(np.sum(atoms.get_initial_charges())))))
+        return cls.from_arrays(atoms.get_atomic_numbers(), atoms.get_positions(), freqs, modes, **kwargs)
 
     def _parse(self) -> None:
         """Parse the output file with cclib and store molecular data.
@@ -852,6 +994,31 @@ class QRCGenerator:
                 "Ensure it is a valid Gaussian, ORCA, or Q-Chem output file."
             )
 
+        self._set_data(data)
+
+    def _set_options(self, file, amplitude, nproc, mem, route, verbose, suffix,
+                     val, num, xyz, outdir, overwrite, from_file) -> None:
+        """Store the run options (see __init__)."""
+        # Called only while constructing (__init__, from_arrays)
+        # pylint: disable=attribute-defined-outside-init
+        self.file = file
+        self.amplitude = amplitude
+        self.nproc = nproc
+        self.mem = mem
+        self.route = route
+        self.verbose = verbose
+        self.suffix = suffix
+        self.val = val
+        self.num = num
+        self.xyz = xyz
+        self.outdir = outdir
+        self.overwrite = overwrite
+        self._from_file = from_file
+
+    def _set_data(self, data) -> None:
+        """Store molecular data from a cclib data object (or one with the same attributes)."""
+        # Called only while constructing (__init__, from_arrays)
+        # pylint: disable=attribute-defined-outside-init
         self.NATOMS = data.natom
         self.CHARGE = data.charge
         self.ATOMNOS = data.atomnos
@@ -863,7 +1030,7 @@ class QRCGenerator:
             print('Warning - multiplicity not parsed from input: defaulted to 1 in input files')
 
         self.ATOMTYPES = [PERIODIC_TABLE[z] for z in self.ATOMNOS]
-        self.CARTESIAN = data.atomcoords[-1].copy()
+        self.CARTESIAN = np.array(data.atomcoords[-1], dtype=float)
         self.FREQS = data.vibfreqs
         self.DISPS = data.vibdisps
 
@@ -919,6 +1086,8 @@ class QRCGenerator:
             QRCParseError: If a Q-Chem input is requested but the method or
                 basis set could not be parsed from the output. Raised before
                 any file is written.
+            QRCFileExistsError: If overwrite is off and a file to be written
+                already exists. Raised before any file is written.
         """
         file_path = Path(self.file)
         nat = self.NATOMS
@@ -926,7 +1095,7 @@ class QRCGenerator:
         # Resolve output format and route, preferring cclib metadata
         format_type = self._format_type
         route = self.route
-        if format_type is None or route is None:
+        if self._from_file and (format_type is None or route is None):
             gdata = OutputData(self.file)
             if format_type is None:
                 format_type = gdata.format
@@ -938,7 +1107,7 @@ class QRCGenerator:
                     'the parsed geometry and normal modes may be incomplete'
                 )
 
-        if self.xyz:
+        if self.xyz or (not self._from_file and format_type is None):
             format_type = "xyz"
         elif format_type not in ("Gaussian", "ORCA", "QChem"):
             print(
@@ -964,8 +1133,23 @@ class QRCGenerator:
                     "is complete."
                 )
 
+        paths = self._paths(format_type)
+        existing = [str(path) for path in paths if path.exists()]
+        if existing and not self.overwrite:
+            raise QRCFileExistsError(
+                f"{', '.join(existing)} already exist{'s' if len(existing) == 1 else ''}: "
+                "use --overwrite to replace, or --name/--outdir to write elsewhere"
+            )
+        if self.outdir:
+            Path(self.outdir).mkdir(parents=True, exist_ok=True)
+        if not self._target_modes:
+            print(
+                f'Warning - {self.file}: no imaginary modes and no mode requested: '
+                'the geometry was not displaced'
+            )
+
         if self.verbose:
-            with Logger(file_path.stem, "qrc", self.suffix) as log:
+            with Logger(self._out_stem(), "qrc", self.suffix) as log:
                 self._write_header(
                     log, self.ATOMTYPES, self.CARTESIAN, nat,
                     self.FREQS, self.RMASS, self.FCONST, len(self.FREQS)
@@ -990,8 +1174,32 @@ class QRCGenerator:
             self._func, self._basis, extra
         )
 
+    def _out_stem(self) -> str:
+        """Output path without the _<suffix>.<ext> ending."""
+        return str(Path(self.outdir or '.') / Path(self.file).stem)
+
+    def _paths(self, format_type: str) -> list[Path]:
+        """Files write_files writes for a given output format."""
+        stem = Path(self._out_stem())
+        ext = INPUT_EXTENSIONS.get(format_type, "xyz")
+        paths = [stem.with_name(f'{stem.name}_{self.suffix}.{ext}')]
+        if self.verbose:
+            paths.append(stem.with_name(f'{stem.name}_{self.suffix}.qrc'))
+        return paths
+
+    def output_paths(self) -> list[Path]:
+        """Return the paths write_files will write (input file, then .qrc if verbose)."""
+        format_type = self._format_type
+        if format_type is None and self._from_file:
+            format_type = OutputData(self.file).format
+        if self.xyz or format_type not in INPUT_EXTENSIONS:
+            format_type = "xyz"
+        return self._paths(format_type)
+
     def _gaussian_route_and_tail(self, route: Optional[str]) -> tuple[str, Optional[str]]:
         """Resolve the Gaussian route and the input to write after the geometry."""
+        if not self._from_file:
+            return route or '', None
         route = route or ''
         original_route = route
         cloned = self.route is None
@@ -1029,8 +1237,10 @@ class QRCGenerator:
 
     def _orca_route_and_blocks(self, route: Optional[str]) -> tuple[str, list[str]]:
         """Resolve the ORCA keywords and the %blocks of the original input."""
-        with open(self.file, encoding='utf-8', errors='replace') as f:
-            _, blocks = read_orca_input(f.readlines())
+        blocks = []
+        if self._from_file:
+            with open(self.file, encoding='utf-8', errors='replace') as f:
+                _, blocks = read_orca_input(f.readlines())
         route = route or ''
         if self.route is None and route.strip():
             new_route = minimization_route_orca(route)
@@ -1141,9 +1351,9 @@ class QRCGenerator:
                 text after the geometry (Gaussian), a list of %block lines
                 (ORCA), or ($rem lines, other $section lines) (Q-Chem).
         """
-        input_ext = {"Gaussian": "com", "ORCA": "inp", "QChem": "inp"}.get(format_type, "xyz")
+        input_ext = INPUT_EXTENSIONS.get(format_type, "xyz")
 
-        with Logger(file_path.stem, input_ext, suffix) as new_input:
+        with Logger(self._out_stem(), input_ext, suffix) as new_input:
             if format_type == "Gaussian":
                 new_input.write(f'%chk={file_path.stem}_{suffix}.chk')
                 new_input.write(f'%nproc={nproc}\n%mem={mem}\n{gaussian_route_line(route)}')
@@ -1288,7 +1498,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--auto", dest="auto", action="store_true", default=False,
-        help="turn on automatic batch processing"
+        help="skip files without imaginary frequencies, even with --freq/--freqnum "
+             "(without them, such files are always skipped)"
     )
     parser.add_argument(
         "--name", dest="suffix", type=str, default=DEFAULT_SUFFIX,
@@ -1310,6 +1521,14 @@ def main() -> int:
     parser.add_argument(
         "--xyz", dest="xyz", action="store_true", default=False,
         help="write the displaced geometry as an .xyz file instead of an input file"
+    )
+    parser.add_argument(
+        "--outdir", dest="outdir", type=str, default=None, metavar="DIR",
+        help="directory for the new files (default: current directory)"
+    )
+    parser.add_argument(
+        "--overwrite", dest="overwrite", action="store_true", default=False,
+        help="replace existing files (by default a file is skipped if any output exists)"
     )
     parser.add_argument(
         "--qcoord", dest="qcoord", action="store_true", default=False,
@@ -1363,9 +1582,11 @@ def main() -> int:
             print(f'x   {file} has no frequency information: skipping')
             continue
 
+        mode_requested = args.freq is not None or args.freqnum is not None
         if not args.qcoord:
-            if im_freq == 0 and args.auto:
-                print(f'x   {file} has no imaginary frequencies: skipping')
+            if im_freq == 0 and (args.auto or not mode_requested):
+                hint = '' if args.auto else ' (use --freq or --freqnum to displace along a real mode)'
+                print(f'x   {file} has no imaginary frequencies: skipping{hint}')
             else:
                 if args.both:
                     runs = [(args.amplitude, f'{args.suffix}F'), (-args.amplitude, f'{args.suffix}R')]
@@ -1373,17 +1594,30 @@ def main() -> int:
                     runs = [(args.amplitude, args.suffix)]
                 _SHOWN_MESSAGES = set()
                 try:
-                    for amplitude, suffix in runs:
-                        qrc = QRCGenerator(
+                    generators = [
+                        QRCGenerator(
                             file, amplitude, args.nproc, args.mem, args.route,
-                            args.verbose, suffix, args.freq, args.freqnum, xyz=args.xyz
+                            args.verbose, suffix, args.freq, args.freqnum, write=False,
+                            xyz=args.xyz, outdir=args.outdir, overwrite=args.overwrite
                         )
+                        for amplitude, suffix in runs
+                    ]
+                    # Check every output first, so --both never writes half a pair
+                    existing = [str(path) for qrc in generators for path in qrc.output_paths()
+                                if path.exists()]
+                    if existing and not args.overwrite:
+                        raise QRCFileExistsError(
+                            f"{', '.join(existing)} already exist{'s' if len(existing) == 1 else ''}: "
+                            "use --overwrite to replace, or --name/--outdir to write elsewhere"
+                        )
+                    for qrc, (_, suffix) in zip(generators, runs):
+                        qrc.write_files()
                         if qrc.OVERLAPPED:
                             print(
                                 f'Warning - {file}: atoms are very close in the {suffix} '
                                 'structure: consider a smaller --amp'
                             )
-                except (QRCParseError, QRCModeError, ValueError) as exc:
+                except (QRCParseError, QRCModeError, QRCFileExistsError, ValueError) as exc:
                     print(f'x   {file} failed: {exc}')
                     exit_code = 1
                     continue
