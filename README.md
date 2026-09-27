@@ -193,7 +193,7 @@ cd pyQRC
 pip install -e ".[dev]"
 pytest            # run the test suite
 pylint pyqrc      # lint (CI requires a score >= 9.0)
-pytest --nbval examples/g16 examples/orca5 examples/orca6 examples/qchem   # check the notebooks
+pytest --nbval --nbval-sanitize-with examples/nbval_sanitize.cfg examples/g16 examples/orca5 examples/orca6 examples/qchem   # check the notebooks
 ```
 
 **Golden files.** `tests/test_golden.py` runs every example output in `examples/` through pyQRC and compares the input it writes with a reference copy in `tests/golden/`, so any change to generated inputs shows up as a diff. After an intended change, or to add an example, run `pytest tests/test_golden.py --update-golden`, review the changed files in `tests/golden/`, and commit them.

@@ -44,7 +44,7 @@ jobs:
           name: Run example notebooks and compare their saved outputs
           # The ASE/MLIP notebook needs MACE (PyTorch) and a model download, so
           # it is not run here; the rest must reproduce their outputs exactly.
-          command: pytest --nbval -p no:cacheprovider examples/g16 examples/orca5 examples/orca6 examples/qchem
+          command: pytest --nbval --nbval-sanitize-with examples/nbval_sanitize.cfg -p no:cacheprovider examples/g16 examples/orca5 examples/orca6 examples/qchem
 
   package:
     docker:
