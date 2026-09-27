@@ -1,0 +1,27 @@
+$molecule
+0 1
+ H  -0.07740000   0.28530000  -1.06332304
+ C   0.01260000  -0.04620000   0.00473013
+ N  -0.00510000   0.01920000   1.14949291
+$end
+
+$rem
+   JOBTYPE opt
+   METHOD       m06-2x
+   BASIS        6-311+G(d,p)
+   SYM_IGNORE   true
+$end
+
+@@@
+
+$molecule
+   read
+$end
+
+$rem
+   JOBTYPE freq
+   METHOD       m06-2x
+   BASIS        6-311+G(d,p)
+   SYM_IGNORE   true
+$end
+

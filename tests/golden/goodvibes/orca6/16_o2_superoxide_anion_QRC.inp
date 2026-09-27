@@ -1,0 +1,11 @@
+! UKS B3LYP aug-cc-pVTZ Opt Freq
+ %pal nprocs 4 end
+ %maxcore 2048
+# O2 radical anion (superoxide, charge=-1, doublet, diffuse basis)
+
+# 16_o2_superoxide_anion_QRC
+
+* xyz -1 2
+ O   0.00000000   0.00000000  -0.21885310
+ O   0.00000000   0.00000000   1.54885310
+*

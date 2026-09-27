@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Expected pyQRC inputs are compared byte for byte
+tests/golden/** text eol=lf

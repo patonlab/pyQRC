@@ -10,23 +10,40 @@ Based on: Goodman, J. M.; Silva, M. A. Tet. Lett. 2003, 44, 8233-8236;
           Tet. Lett. 2005, 46, 2067-2069.
 """
 
-__version__ = '2.3.0'
+__version__ = '2.4.0'
 __author__ = 'Robert Paton'
 __email__ = 'robert.paton@colostate.edu'
 
+import logging
 import os
 import re
 import shutil
 import subprocess
 import sys
-from argparse import ArgumentParser, Namespace
+from argparse import ArgumentParser, ArgumentTypeError, Namespace
 from contextlib import contextmanager
 from glob import glob
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Optional, Generator
 
 import cclib
 import numpy as np
+
+from pyqrc.orca_reader import ORCAReadError, is_orca_output, read_orca_frequencies
+
+
+# Messages already shown for the file main() is processing (None outside main)
+_SHOWN_MESSAGES: Optional[set] = None
+
+
+def _print_once(message: str) -> None:
+    """Print a message, once per file when --both writes two inputs from it."""
+    if _SHOWN_MESSAGES is None:
+        print(message)
+    elif message not in _SHOWN_MESSAGES:
+        _SHOWN_MESSAGES.add(message)
+        print(message)
 
 
 class QRCParseError(Exception):
@@ -35,6 +52,54 @@ class QRCParseError(Exception):
 
 class QRCModeError(Exception):
     """Raised when a requested normal mode or frequency cannot be matched."""
+
+
+class QRCFileExistsError(FileExistsError):
+    """Raised when a file pyQRC would write already exists and overwrite is off."""
+
+
+def parse_output(file: str):
+    """Parse a frequency calculation with cclib.
+
+    ORCA outputs that cclib cannot read (cclib releases up to 1.8.1 fail on
+    ORCA 6) are read with pyQRC's own ORCA reader instead.
+
+    Args:
+        file: Path to the output file.
+
+    Returns:
+        A cclib data object (or an object with the same attributes), or
+        None if cclib does not recognize the format.
+
+    Raises:
+        QRCParseError: If an ORCA output cannot be read by either parser.
+        Exception: Whatever cclib raises for other formats.
+    """
+    try:
+        orca = is_orca_output(file)
+    except OSError:
+        orca = False
+    try:
+        # cclib logs its own parse errors; for ORCA the fallback may succeed
+        parser = cclib.io.ccopen(file, loglevel=logging.CRITICAL) if orca else cclib.io.ccopen(file)
+        if parser is None and not orca:
+            return None
+        if parser is not None:
+            data = parser.parse()
+            if not orca or hasattr(data, 'vibdisps'):
+                return data
+        cclib_error = 'no normal modes found'
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        if not orca:
+            raise
+        cclib_error = str(exc) or type(exc).__name__
+    try:
+        return read_orca_frequencies(file)
+    except ORCAReadError as exc:
+        raise QRCParseError(
+            f"could not read ORCA output '{file}' (cclib: {cclib_error}; "
+            f"pyQRC ORCA reader: {exc})"
+        ) from exc
 
 
 @contextmanager
@@ -56,11 +121,12 @@ def working_directory(path: Path) -> Generator[None, None, None]:
 
 # Constants
 ANGSTROM_TO_BOHR = 1.88972612456506
-DEFAULT_AMPLITUDE = 0.2
+DEFAULT_AMPLITUDE = 0.3  # best match to IRC in the README benchmark
 FREQ_MATCH_TOLERANCE = 1.0  # cm-1, for matching a user-requested --freq value
 DEFAULT_NPROC = 1
 DEFAULT_MEMORY = "4GB"
 DEFAULT_SUFFIX = "QRC"
+INPUT_EXTENSIONS = {"Gaussian": "com", "ORCA": "inp", "QChem": "inp"}
 
 # Periodic table of elements (index = atomic number)
 PERIODIC_TABLE = [
@@ -82,7 +148,7 @@ ATOMIC_MASSES = [
     20.180, 22.990, 24.305, 26.982, 28.086, 30.973762, 31.972071, 35.453,
     39.948, 39.098, 40.078, 44.956, 47.867, 50.942, 51.996, 54.938, 55.845,
     58.933, 58.693, 63.546, 65.38, 69.723, 72.631, 74.922, 78.971, 79.904,
-    84.798, 84.468, 87.62, 88.906, 91.224, 92.906, 95.95, 98.907, 101.07,
+    83.798, 85.468, 87.62, 88.906, 91.224, 92.906, 95.95, 98.907, 101.07,
     102.906, 106.42, 107.868, 112.414, 114.818, 118.711, 121.760, 126.7,
     126.904, 131.294, 132.905, 137.328, 138.905, 140.116, 140.908, 144.243,
     144.913, 150.36, 151.964, 157.25, 158.925, 162.500, 164.930, 167.259,
@@ -99,7 +165,7 @@ COVALENT_RADII = {
     "N": 0.71, "O": 0.63, "F": 0.64, "Ne": 0.67, "Na": 1.55, "Mg": 1.39,
     "Al": 1.26, "Si": 1.16, "P": 1.11, "S": 1.03, "Cl": 0.99, "Ar": 0.96,
     "K": 1.96, "Ca": 1.71, "Sc": 1.48, "Ti": 1.36, "V": 1.34, "Cr": 1.22,
-    "Mn": 1.19, "Fe": 1.16, "Co": 1.11, "Ni": 1.10, "Zn": 1.18, "Ga": 1.24,
+    "Mn": 1.19, "Fe": 1.16, "Co": 1.11, "Ni": 1.10, "Cu": 1.12, "Zn": 1.18, "Ga": 1.24,
     "Ge": 1.21, "As": 1.21, "Se": 1.16, "Br": 1.14, "Kr": 1.17, "Rb": 2.10,
     "Sr": 1.85, "Y": 1.63, "Zr": 1.54, "Nb": 1.47, "Mo": 1.38, "Tc": 1.28,
     "Ru": 1.25, "Rh": 1.25, "Pd": 1.20, "Ag": 1.28, "Cd": 1.36, "In": 1.42,
@@ -185,7 +251,7 @@ class OutputData:
         self.LEVELOFTHEORY: Optional[str] = None
         self.TERMINATION: Optional[str] = None
 
-        with open(file, 'r', encoding='utf-8') as f:
+        with open(file, 'r', encoding='utf-8', errors='replace') as f:
             outlines = f.readlines()
 
         self._get_format(outlines)
@@ -216,7 +282,7 @@ class OutputData:
             String in format "level/basis_set".
         """
         repeated_theory = 0
-        with open(self.file, encoding='utf-8') as f:
+        with open(self.file, encoding='utf-8', errors='replace') as f:
             data = f.readlines()
         level, bs = 'none', 'none'
 
@@ -281,23 +347,29 @@ class OutputData:
                         break
 
         elif self.format == "ORCA":
-            for line in outlines:
-                if '> !' in line.strip():
-                    self.JOBTYPE = line.strip().split('> !')[1].lstrip()
-                    self.LEVELOFTHEORY = self._level_of_theory()
-                    break
+            keywords, _ = read_orca_input(outlines)
+            if keywords:
+                self.JOBTYPE = keywords
+                self.LEVELOFTHEORY = self._level_of_theory()
 
     def _get_termination(self, outlines: list[str]) -> None:
         """Check if calculation terminated normally.
+
+        A Gaussian job such as "opt freq" runs several steps, each printing
+        its route and its own "Normal termination" line, so every step
+        must have terminated normally.
 
         Args:
             outlines: List of lines from output file.
         """
         if self.format == "Gaussian":
-            for line in outlines:
-                if "Normal termination" in line:
-                    self.TERMINATION = "normal"
-                    return
+            steps = sum(
+                1 for i, line in enumerate(outlines[1:], 1)
+                if line.startswith(' #') and outlines[i - 1].strip().startswith('-----')
+            )
+            normal = sum(1 for line in outlines if "Normal termination" in line)
+            if normal and normal >= steps:
+                self.TERMINATION = "normal"
 
 
 def mwdist(coords1: np.ndarray, coords2: np.ndarray, elements: list[int]) -> float:
@@ -316,6 +388,35 @@ def mwdist(coords1: np.ndarray, coords2: np.ndarray, elements: list[int]) -> flo
         dist += ATOMIC_MASSES[atom] * (np.linalg.norm(coords1[n] - coords2[n])) ** 2
 
     return ANGSTROM_TO_BOHR * dist ** 0.5
+
+
+EV_TO_CM1 = 8065.54429
+
+
+def vibrations_from_ase(vib, min_freq: float = 100.0) -> tuple[np.ndarray, np.ndarray]:
+    """Extract true vibrations from an ase.vibrations.Vibrations run.
+
+    ASE returns all 3N modes, including translations/rotations with
+    near-zero frequencies, and reports imaginary modes as complex energies.
+    This returns signed wavenumbers (negative = imaginary) with those
+    near-zero modes dropped.
+
+    Args:
+        vib: A completed ase.vibrations.Vibrations object.
+        min_freq: Modes with |frequency| below this (cm-1) are discarded as
+            translations/rotations. Raise it if the structure is far from
+            stationary; lower it for floppy systems with genuine
+            low-frequency modes.
+
+    Returns:
+        (frequencies in cm-1, modes as an (M, N, 3) array).
+    """
+    energies = np.asarray(vib.get_energies())  # eV, complex for imaginary
+    wavenumbers = energies * EV_TO_CM1
+    freqs = np.where(np.abs(wavenumbers.imag) > 1e-6, -np.abs(wavenumbers.imag), wavenumbers.real)
+    modes = np.array([vib.get_mode(i) for i in range(len(freqs))])
+    keep = np.abs(freqs) > min_freq
+    return freqs[keep], modes[keep]
 
 
 def gen_overlap(mol_atoms: list[str], coords: np.ndarray, covfrac: float) -> np.ndarray:
@@ -358,6 +459,387 @@ def check_overlap(atom_types: list[str], coords: np.ndarray, covfrac: float = 0.
     return bool(np.any(over_mat))
 
 
+# Bytes per memory unit; Gaussian words (W) are 8 bytes
+MEMORY_UNITS = {
+    'B': 1, 'KB': 1024, 'MB': 1024 ** 2, 'GB': 1024 ** 3, 'TB': 1024 ** 4,
+    'KW': 8 * 1024, 'MW': 8 * 1024 ** 2, 'GW': 8 * 1024 ** 3, 'TW': 8 * 1024 ** 4,
+}
+
+
+def memory_to_mb(mem: str) -> int:
+    """Convert a memory string such as "8GB" or "4000MB" to megabytes.
+
+    Units are case-insensitive; a bare number is taken as MB.
+
+    Args:
+        mem: Memory string.
+
+    Returns:
+        Memory in MB (rounded down).
+
+    Raises:
+        ValueError: If the string cannot be parsed.
+    """
+    match = re.fullmatch(r'\s*(\d+(?:\.\d*)?)\s*([A-Za-z]*)\s*', mem)
+    if not match or (match[2] and match[2].upper() not in MEMORY_UNITS):
+        raise ValueError(f"cannot parse memory '{mem}': expected e.g. 8GB or 4000MB")
+    value, unit = float(match[1]), match[2].upper()
+    if not unit:
+        return int(value)
+    return int(value * MEMORY_UNITS[unit] / 1024 ** 2)
+
+
+# Gaussian opt options that request a saddle-point search or read data from
+# the original checkpoint file (which the new job does not have)
+GAUSSIAN_TS_OPT_OPTIONS = ('ts', 'saddle', 'qst2', 'qst3', 'noeigen', 'eigentest', 'readfc', 'rcfc')
+GAUSSIAN_OPT_KEYWORDS = ('opt', 'optimize', 'optimization')
+GAUSSIAN_PRINT_LEVELS = ('p', 'n', 't')
+# ORCA simple-input keywords that request a saddle-point search
+ORCA_TS_KEYWORDS = ('optts', 'scants')
+ORCA_OPT_KEYWORDS = (
+    'opt', 'copt', 'zopt', 'gdiis-copt', 'gdiis-zopt', 'loose-opt', 'looseopt',
+    'normalopt', 'tightopt', 'verytightopt', 'sloppyopt', 'l-opt', 'optts',
+)
+# Gaussian route keywords that need extra input sections after the geometry
+GAUSSIAN_EXTRA_INPUT = re.compile(
+    r'\bgen(ecp|sp)?\b|extrabasis|extradensitybasis|\bread\b|\bcards\b|modred|addred|\bnbo\d*read\b',
+    re.IGNORECASE,
+)
+
+
+def _split_gaussian_route(route: str) -> list[str]:
+    """Split a Gaussian route into keywords, keeping parenthesised options together."""
+    tokens, current, depth = [], '', 0
+    for char in route:
+        if char in '([':
+            depth += 1
+        elif char in ')]':
+            depth = max(depth - 1, 0)
+        if char.isspace() and depth == 0:
+            if current:
+                tokens.append(current)
+            current = ''
+        else:
+            current += char
+    if current:
+        tokens.append(current)
+    return tokens
+
+
+def _parse_gaussian_keyword(token: str) -> tuple[str, list[str]]:
+    """Split 'opt=(ts,calcfc)', 'opt(ts)' or 'opt=ts' into name and options."""
+    match = re.match(r'([^=(]+)=?(.*)$', token)
+    name, options = match[1], match[2].strip()
+    if options.startswith('(') and options.endswith(')'):
+        options = options[1:-1]
+    return name, [opt.strip() for opt in options.split(',') if opt.strip()]
+
+
+def _format_gaussian_keyword(name: str, options: list[str]) -> str:
+    """Inverse of _parse_gaussian_keyword."""
+    if not options:
+        return name
+    if len(options) == 1:
+        return f'{name}={options[0]}'
+    return f'{name}=({",".join(options)})'
+
+
+def minimization_route_gaussian(route: str) -> str:
+    """Turn a cloned Gaussian route into one for a minimization.
+
+    Removes saddle-point options from opt (ts, saddle=N, noeigentest, ...),
+    options that read from the original checkpoint (readfc, guess=read),
+    and adds opt if the route has none (e.g. a frequency-only job).
+
+    Args:
+        route: Route without the leading '#'.
+
+    Returns:
+        The modified route.
+    """
+    tokens = _split_gaussian_route(route)
+    new_tokens = []
+    has_opt = False
+    for token in tokens:
+        name, options = _parse_gaussian_keyword(token)
+        if name.lower() in GAUSSIAN_OPT_KEYWORDS:
+            has_opt = True
+            kept = [opt for opt in options
+                    if not opt.lower().split('=')[0].startswith(GAUSSIAN_TS_OPT_OPTIONS)]
+            if kept != options:
+                token = _format_gaussian_keyword(name, kept)
+        elif name.lower() == 'guess':
+            kept = [opt for opt in options if opt.lower() != 'read']
+            if kept != options:
+                token = _format_gaussian_keyword(name, kept) if kept else ''
+        if token:
+            new_tokens.append(token)
+    if not has_opt:
+        pos = 1 if new_tokens and new_tokens[0].lower() in GAUSSIAN_PRINT_LEVELS else 0
+        new_tokens.insert(pos, 'opt')
+    return ' '.join(new_tokens)
+
+
+def minimization_route_orca(route: str) -> str:
+    """Turn a cloned ORCA simple-input line into one for a minimization.
+
+    Replaces OptTS/ScanTS with Opt and adds Opt if the line has no
+    optimization keyword.
+
+    Args:
+        route: Simple-input keywords without the leading '!'.
+
+    Returns:
+        The modified keywords.
+    """
+    tokens = []
+    has_opt = False
+    for token in route.split():
+        if token.lower() in ORCA_TS_KEYWORDS:
+            token = 'Opt'
+        if token.lower() in ORCA_OPT_KEYWORDS:
+            has_opt = True
+        tokens.append(token)
+    if not has_opt:
+        tokens.append('Opt')
+    return ' '.join(tokens)
+
+
+def gaussian_route_line(route: str) -> str:
+    """Format a route as a Gaussian '#' line, accepting routes with or without '#'."""
+    route = route.strip().lstrip('#').strip()
+    first = route.split()[0].lower() if route else ''
+    if first in GAUSSIAN_PRINT_LEVELS:
+        return f'#{route}'
+    return f'# {route}'
+
+
+def _blank_line_sections(lines: list[str]) -> list[list[str]]:
+    """Split lines into blank-line separated sections."""
+    sections, current = [], []
+    for line in lines:
+        if line.strip():
+            current.append(line.rstrip())
+        elif current:
+            sections.append(current)
+            current = []
+    if current:
+        sections.append(current)
+    return sections
+
+
+def _is_float(text: str) -> bool:
+    try:
+        float(text)
+    except ValueError:
+        return False
+    return True
+
+
+def _normalize_route(route: str) -> str:
+    """Normalize a Gaussian route for comparison (case, spaces, geom=)."""
+    route = re.sub(r'geom\s*=\s*(\([^)]*\)|\S+)', '', route, flags=re.IGNORECASE)
+    return re.sub(r'[\s#]', '', route).lower()
+
+
+def read_gaussian_input_tail(log_file: str) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """Find the Gaussian input next to an output and read what follows the geometry.
+
+    Gaussian outputs do not echo the input sections that follow the
+    geometry (Gen/GenECP basis sets, ModRedundant lines, SCRF=Read input,
+    ...), so they are taken from <stem>.com or <stem>.gjf in the same
+    directory as the output. Only the first job of a --Link1-- file is read.
+
+    Args:
+        log_file: Path to the Gaussian output.
+
+    Returns:
+        (input file path, its route, text after the geometry). All None if
+        no input file was found; the text is None if there is nothing after
+        the geometry or it cannot be separated reliably (Z-matrix input).
+    """
+    log_path = Path(log_file)
+    candidates = [
+        log_path.with_suffix(ext) for ext in ('.com', '.gjf', '.COM', '.GJF')
+    ]
+    input_path = next((path for path in candidates if path.is_file()), None)
+    if input_path is None:
+        return None, None, None
+
+    with open(input_path, encoding='utf-8', errors='replace') as f:
+        lines = f.read().splitlines()
+    for i, line in enumerate(lines):
+        if line.strip().lower() == '--link1--':
+            lines = lines[:i]
+            break
+    sections = _blank_line_sections(lines)
+    if not sections:
+        return str(input_path), None, None
+
+    route = ' '.join(line.strip() for line in sections[0] if not line.strip().startswith('%'))
+    route_lower = route.lower()
+    if 'allcheck' in route_lower:
+        # No title or charge/geometry sections
+        tail = sections[1:]
+    else:
+        tail = sections[3:]
+        geometry = sections[2][1:] if len(sections) > 2 else []
+        if any(len(line.split()) < 4 or not all(_is_float(x) for x in line.split()[-3:])
+               for line in geometry):
+            # Z-matrix: variables/constants sections cannot be told apart
+            # reliably from the rest, so do not copy anything
+            return str(input_path), route, None
+    if 'connect' in route_lower and tail:
+        # geom=connectivity is not carried over, so neither is its section
+        tail = tail[1:]
+    if not tail:
+        return str(input_path), route, None
+    return str(input_path), route, '\n\n'.join('\n'.join(sec) for sec in tail)
+
+
+def read_orca_input(outlines: list[str]) -> tuple[Optional[str], list[str]]:
+    """Read the input file that ORCA echoes at the top of its output.
+
+    Only the first job ($new_job) is read. The coordinates, %pal and
+    %maxcore are left out since pyQRC writes its own.
+
+    Args:
+        outlines: Lines of the ORCA output.
+
+    Returns:
+        (simple-input keywords from all '!' lines, remaining input lines
+        such as %blocks). Keywords are None if no echoed input was found.
+    """
+    echo = []
+    reading = False
+    for line in outlines:
+        if 'INPUT FILE' in line and not reading:
+            reading = True
+            continue
+        if reading:
+            if '****END OF INPUT****' in line:
+                break
+            match = re.match(r'\|\s*\d+>\s?(.*)$', line.rstrip('\n'))
+            if match:
+                echo.append(match[1])
+
+    keywords, other = [], []
+    skip_until = None  # (terminator, count)
+    for line in echo:
+        stripped = line.strip()
+        lower = stripped.lower()
+        if lower.startswith('$new_job'):
+            break
+        if skip_until is not None:
+            if lower == skip_until[0] or (skip_until[0] == 'end' and lower.endswith(' end')):
+                skip_until = (skip_until[0], skip_until[1] - 1)
+                if skip_until[1] == 0:
+                    skip_until = None
+            continue
+        if stripped.startswith('!'):
+            keywords.append(stripped[1:].split('#')[0].strip())
+        elif re.match(r'\*\s*(xyzfile|gzmtfile|pdbfile)\b', lower):
+            continue
+        elif stripped.startswith('*'):
+            skip_until = ('*', 1)
+        elif lower.startswith('%coords'):
+            skip_until = ('end', 2)
+        elif lower.startswith('%pal'):
+            if not re.search(r'\bend\s*$', lower):
+                skip_until = ('end', 1)
+        elif lower.startswith('%maxcore'):
+            continue
+        else:
+            other.append(line)
+
+    while other and not other[-1].strip():
+        other.pop()
+    while other and not other[0].strip():
+        other.pop(0)
+    if not keywords:
+        return None, other
+    return ' '.join(kw for kw in keywords if kw), other
+
+
+def read_qchem_charge_mult(file: str) -> Optional[tuple[int, int]]:
+    """Read charge and multiplicity from the first $molecule Q-Chem echoes.
+
+    cclib derives the Q-Chem charge from the electron count, which is wrong
+    with effective core potentials (e.g. +46 for iodobenzene with an ECP).
+
+    Args:
+        file: Path to the Q-Chem output.
+
+    Returns:
+        (charge, multiplicity), or None if not found.
+    """
+    with open(file, encoding='utf-8', errors='replace') as f:
+        lines = f.read().splitlines()
+    for i, line in enumerate(lines):
+        if line.strip().lower() == '$molecule':
+            fields = next((l.split() for l in lines[i + 1:] if l.strip()), [])
+            if len(fields) == 2 and all(re.fullmatch(r'-?\d+', x) for x in fields):
+                return int(fields[0]), int(fields[1])
+    return None
+
+
+def read_qchem_input(file: str) -> Optional[tuple[list[str], list[str]]]:
+    """Read the input that Q-Chem echoes under "User input:" for each job.
+
+    The frequency job is used (the last job if none is a frequency job).
+
+    Args:
+        file: Path to the Q-Chem output.
+
+    Returns:
+        ($rem lines other than JOBTYPE, lines of any other $sections), or
+        None if no echoed $rem section was found.
+    """
+    with open(file, encoding='utf-8', errors='replace') as f:
+        lines = f.read().splitlines()
+
+    jobs = []
+    for i, line in enumerate(lines):
+        if line.strip() == 'User input:':
+            job = []
+            for other in lines[i + 2:]:
+                if other.startswith('-----'):
+                    break
+                job.append(other)
+            jobs.append(job)
+    if not jobs:
+        return None
+
+    def sections(job):
+        found, name, body = [], None, []
+        for line in job:
+            lower = line.strip().lower()
+            if name is None and lower.startswith('$'):
+                name, body = lower.split()[0], [line]
+            elif name is not None:
+                body.append(line)
+                if lower == '$end':
+                    found.append((name, body))
+                    name = None
+        return found
+
+    def is_freq(job):
+        return any(re.match(r'\s*jobtype\s*=?\s*freq', line, re.IGNORECASE)
+                   for name, body in sections(job) if name == '$rem' for line in body)
+
+    job = next((job for job in jobs if is_freq(job)), jobs[-1])
+    rem, extra = None, []
+    for name, body in sections(job):
+        if name == '$rem':
+            rem = ['   ' + line.strip() for line in body[1:-1]
+                   if line.strip() and not re.match(r'\s*jobtype\b', line, re.IGNORECASE)]
+        elif name != '$molecule':
+            extra.extend(body)
+    if rem is None:
+        return None
+    return rem, extra
+
+
 class QRCGenerator:
     """Generate Quick Reaction Coordinate displaced structures.
 
@@ -376,7 +858,10 @@ class QRCGenerator:
         suffix: str,
         val: Optional[float],
         num: Optional[int],
-        write: bool = True
+        write: bool = True,
+        xyz: bool = False,
+        outdir: Optional[str] = None,
+        overwrite: bool = True
     ):
         """Initialize QRC generator and create displaced structure.
 
@@ -392,21 +877,129 @@ class QRCGenerator:
             num: Specific mode number to displace along (1-indexed).
             write: Whether to write output files (False to only compute
                 the displaced geometry, e.g. for library use).
+            xyz: Write an .xyz file of the displaced geometry instead of
+                an input file for the original program.
+            outdir: Directory for the new files (created if needed);
+                defaults to the current directory.
+            overwrite: Replace existing files. If False, write_files raises
+                QRCFileExistsError before writing anything.
         """
-        self.file = file
-        self.amplitude = amplitude
-        self.nproc = nproc
-        self.mem = mem
-        self.route = route
-        self.verbose = verbose
-        self.suffix = suffix
-        self.val = val
-        self.num = num
-
+        self._set_options(file, amplitude, nproc, mem, route, verbose, suffix,
+                          val, num, xyz, outdir, overwrite, from_file=True)
         self._parse()
         self.compute_displacement()
         if write:
             self.write_files()
+
+    @classmethod
+    def from_arrays(
+        cls,
+        atomnos,
+        coords,
+        freqs,
+        modes,
+        amplitude: float = DEFAULT_AMPLITUDE,
+        charge: int = 0,
+        mult: int = 1,
+        val: Optional[float] = None,
+        num: Optional[int] = None,
+        name: str = "qrc",
+        program: Optional[str] = None,
+        route: Optional[str] = None,
+        nproc: int = DEFAULT_NPROC,
+        mem: str = DEFAULT_MEMORY,
+        suffix: str = DEFAULT_SUFFIX,
+        verbose: bool = False,
+        outdir: Optional[str] = None,
+        overwrite: bool = True,
+        write: bool = False,
+    ) -> "QRCGenerator":
+        """Create a generator from arrays instead of an output file.
+
+        For frequencies computed outside a QM program, e.g. with ASE and a
+        machine-learned potential. Each mode is normalized to unit Cartesian
+        norm, as Gaussian and ORCA print them, so amplitudes mean the same
+        as for output files.
+
+        Args:
+            atomnos: Atomic numbers (N).
+            coords: Coordinates in Angstrom (N x 3).
+            freqs: Vibrational frequencies in cm-1, negative for imaginary
+                modes (M). Leave out translations and rotations.
+            modes: Cartesian displacements for each frequency (M x N x 3).
+            amplitude, val, num, nproc, mem, suffix, verbose, outdir,
+                overwrite: As for QRCGenerator.
+            charge: Molecular charge written to input files.
+            mult: Spin multiplicity written to input files.
+            name: Base name for files written (without extension).
+            program: "Gaussian" or "ORCA" to write an input file for that
+                program (needs route); None writes an .xyz file.
+            route: Gaussian route or ORCA '!' keywords, used as given.
+            write: Write files immediately (default False: only compute).
+
+        Returns:
+            The generator; NEW_CARTESIAN holds the displaced geometry.
+
+        Raises:
+            ValueError: If array shapes are inconsistent, or program is not
+                supported or lacks a route.
+        """
+        atomnos = np.asarray(atomnos, dtype=int).reshape(-1)
+        natoms = len(atomnos)
+        coords = np.asarray(coords, dtype=float)
+        freqs = np.asarray(freqs, dtype=float).reshape(-1)
+        modes = np.asarray(modes, dtype=float)
+        if coords.shape != (natoms, 3):
+            raise ValueError(f"coords must have shape ({natoms}, 3), got {coords.shape}")
+        if modes.shape != (len(freqs), natoms, 3):
+            raise ValueError(
+                f"modes must have shape ({len(freqs)}, {natoms}, 3) to match "
+                f"{len(freqs)} frequencies and {natoms} atoms, got {modes.shape}"
+            )
+        if np.any((atomnos < 1) | (atomnos >= len(PERIODIC_TABLE))):
+            raise ValueError("atomnos must be atomic numbers between 1 and 118")
+        if program not in (None, "Gaussian", "ORCA"):
+            raise ValueError("program must be 'Gaussian', 'ORCA' or None (for an .xyz file)")
+        if program is not None and not route:
+            raise ValueError(f"a route is needed to write a {program} input from arrays")
+        norms = np.linalg.norm(modes.reshape(len(freqs), -1), axis=1)
+        if np.any(norms == 0):
+            raise ValueError("modes must not contain all-zero displacement vectors")
+
+        qrc = cls.__new__(cls)
+        qrc._set_options(name, amplitude, nproc, mem, route, verbose, suffix, val, num,
+                         xyz=program is None, outdir=outdir, overwrite=overwrite, from_file=False)
+        qrc._set_data(SimpleNamespace(
+            natom=natoms, charge=charge, mult=mult, atomnos=atomnos,
+            atomcoords=[coords], vibfreqs=freqs, vibdisps=modes / norms[:, None, None],
+            metadata={'package': program},
+        ))
+        qrc.compute_displacement()
+        if write:
+            qrc.write_files()
+        return qrc
+
+    @classmethod
+    def from_ase(cls, vib, min_freq: float = 100.0, **kwargs) -> "QRCGenerator":
+        """Create a generator from a completed ase.vibrations.Vibrations run.
+
+        ASE is not a pyQRC dependency; this only calls methods of the object
+        passed in. Charge is taken from the atoms' initial charges unless
+        given.
+
+        Args:
+            vib: Completed ase.vibrations.Vibrations (vib.run() done).
+            min_freq: Modes with |frequency| below this (cm-1) are dropped as
+                translations/rotations (see vibrations_from_ase).
+            **kwargs: Passed to from_arrays (amplitude, num, program, ...).
+
+        Returns:
+            The generator; NEW_CARTESIAN holds the displaced geometry.
+        """
+        atoms = vib.atoms
+        freqs, modes = vibrations_from_ase(vib, min_freq)
+        kwargs.setdefault("charge", int(round(float(np.sum(atoms.get_initial_charges())))))
+        return cls.from_arrays(atoms.get_atomic_numbers(), atoms.get_positions(), freqs, modes, **kwargs)
 
     def _parse(self) -> None:
         """Parse the output file with cclib and store molecular data.
@@ -416,21 +1009,49 @@ class QRCGenerator:
                 parsing fails.
         """
         try:
-            parser = cclib.io.ccopen(self.file)
-            if parser is None:
-                raise QRCParseError(
-                    f"Could not determine file format for '{self.file}'. "
-                    "Ensure it is a valid Gaussian, ORCA, or Q-Chem output file."
-                )
-            data = parser.parse()
+            data = parse_output(self.file)
+        except QRCParseError:
+            raise
         except Exception as exc:
-            if isinstance(exc, QRCParseError):
-                raise
             raise QRCParseError(
                 f"Failed to parse '{self.file}': {exc}. "
                 "The file may be corrupted or from an unsupported format."
             ) from exc
+        if data is None:
+            raise QRCParseError(
+                f"Could not determine file format for '{self.file}'. "
+                "Ensure it is a valid Gaussian, ORCA, or Q-Chem output file."
+            )
+        if getattr(data, 'metadata', {}).get('package') == 'QChem':
+            charge_mult = read_qchem_charge_mult(self.file)
+            if charge_mult is not None:
+                data.charge, data.mult = charge_mult
 
+        self._set_data(data)
+
+    def _set_options(self, file, amplitude, nproc, mem, route, verbose, suffix,
+                     val, num, xyz, outdir, overwrite, from_file) -> None:
+        """Store the run options (see __init__)."""
+        # Called only while constructing (__init__, from_arrays)
+        # pylint: disable=attribute-defined-outside-init
+        self.file = file
+        self.amplitude = amplitude
+        self.nproc = nproc
+        self.mem = mem
+        self.route = route
+        self.verbose = verbose
+        self.suffix = suffix
+        self.val = val
+        self.num = num
+        self.xyz = xyz
+        self.outdir = outdir
+        self.overwrite = overwrite
+        self._from_file = from_file
+
+    def _set_data(self, data) -> None:
+        """Store molecular data from a cclib data object (or one with the same attributes)."""
+        # Called only while constructing (__init__, from_arrays)
+        # pylint: disable=attribute-defined-outside-init
         self.NATOMS = data.natom
         self.CHARGE = data.charge
         self.ATOMNOS = data.atomnos
@@ -442,11 +1063,16 @@ class QRCGenerator:
             print('Warning - multiplicity not parsed from input: defaulted to 1 in input files')
 
         self.ATOMTYPES = [PERIODIC_TABLE[z] for z in self.ATOMNOS]
-        self.CARTESIAN = data.atomcoords[-1].copy()
+        self.CARTESIAN = np.array(data.atomcoords[-1], dtype=float)
         self.FREQS = data.vibfreqs
         self.DISPS = data.vibdisps
 
         nmodes = len(self.FREQS)
+        if self.NATOMS > 2 and nmodes < 3 * self.NATOMS - 6:
+            _print_once(
+                f'Warning - {self.file}: only {nmodes} of {3 * self.NATOMS - 6} normal modes '
+                'were read: the output may be incomplete (or atoms were frozen)'
+            )
         self.RMASS = data.vibrmasses if hasattr(data, 'vibrmasses') else [0.0] * nmodes
         self.FCONST = data.vibfconsts if hasattr(data, 'vibfconsts') else [0.0] * nmodes
 
@@ -472,7 +1098,6 @@ class QRCGenerator:
         Raises:
             QRCModeError: If a specifically requested mode cannot be matched.
         """
-        nmodes = len(self.FREQS)
         self._target_modes = self._resolve_target_modes(self.FREQS, self.val, self.num)
 
         new_cartesian = self.CARTESIAN.copy()
@@ -483,16 +1108,27 @@ class QRCGenerator:
 
         self.NEW_CARTESIAN = new_cartesian
         self.MW_DISTANCE = mwdist(self.NEW_CARTESIAN, self.CARTESIAN, self.ATOMNOS)
-        self.OVERLAPPED = check_overlap(self.ATOMTYPES, self.NEW_CARTESIAN)
+        # Only contacts created by the displacement count: short bonds such
+        # as C#N are already below the threshold in the original structure
+        new_contacts = gen_overlap(self.ATOMTYPES, self.NEW_CARTESIAN, 0.8)
+        old_contacts = gen_overlap(self.ATOMTYPES, self.CARTESIAN, 0.8)
+        self.OVERLAPPED = bool(np.any((new_contacts > 0) & (old_contacts == 0)))
         return self.NEW_CARTESIAN
 
     def write_files(self) -> None:
         """Write the verbose .qrc summary (if verbose) and the new input file.
 
+        When the route is cloned from the original job it is changed to
+        optimize to a minimum (e.g. opt=ts -> opt, OptTS -> Opt). Input that
+        follows the geometry (Gaussian), %blocks (ORCA) and $rem settings
+        (Q-Chem) are carried over from the original input.
+
         Raises:
             QRCParseError: If a Q-Chem input is requested but the method or
                 basis set could not be parsed from the output. Raised before
                 any file is written.
+            QRCFileExistsError: If overwrite is off and a file to be written
+                already exists. Raised before any file is written.
         """
         file_path = Path(self.file)
         nat = self.NATOMS
@@ -500,7 +1136,7 @@ class QRCGenerator:
         # Resolve output format and route, preferring cclib metadata
         format_type = self._format_type
         route = self.route
-        if format_type is None or route is None:
+        if self._from_file and (format_type is None or route is None):
             gdata = OutputData(self.file)
             if format_type is None:
                 format_type = gdata.format
@@ -512,16 +1148,49 @@ class QRCGenerator:
                     'the parsed geometry and normal modes may be incomplete'
                 )
 
-        if format_type == "QChem" and (self._func is None or self._basis is None):
-            raise QRCParseError(
-                f"Cannot write a Q-Chem input for '{self.file}': the method "
-                "and/or basis set could not be parsed from the output, so the "
-                "input would contain 'METHOD None'. Check that the output file "
-                "is complete."
+        if self.xyz or (not self._from_file and format_type is None):
+            format_type = "xyz"
+        elif format_type not in ("Gaussian", "ORCA", "QChem"):
+            print(
+                f'Warning - {self.file}: writing {format_type or "this program"} '
+                'inputs is not supported: writing an .xyz file instead'
+            )
+            format_type = "xyz"
+
+        extra = None
+        if format_type == "Gaussian":
+            route, extra = self._gaussian_route_and_tail(route)
+        elif format_type == "ORCA":
+            route, extra = self._orca_route_and_blocks(route)
+        elif format_type == "QChem":
+            if self.route is not None:
+                print(f'Warning - {self.file}: --route is ignored for Q-Chem inputs')
+            extra = read_qchem_input(self.file)
+            if extra is None and (self._func is None or self._basis is None):
+                raise QRCParseError(
+                    f"Cannot write a Q-Chem input for '{self.file}': the method "
+                    "and/or basis set could not be parsed from the output, so the "
+                    "input would contain 'METHOD None'. Check that the output file "
+                    "is complete."
+                )
+
+        paths = self._paths(format_type)
+        existing = [str(path) for path in paths if path.exists()]
+        if existing and not self.overwrite:
+            raise QRCFileExistsError(
+                f"{', '.join(existing)} already exist{'s' if len(existing) == 1 else ''}: "
+                "use --overwrite to replace, or --name/--outdir to write elsewhere"
+            )
+        if self.outdir:
+            Path(self.outdir).mkdir(parents=True, exist_ok=True)
+        if not self._target_modes:
+            print(
+                f'Warning - {self.file}: no imaginary modes and no mode requested: '
+                'the geometry was not displaced'
             )
 
         if self.verbose:
-            with Logger(file_path.stem, "qrc", self.suffix) as log:
+            with Logger(self._out_stem(), "qrc", self.suffix) as log:
                 self._write_header(
                     log, self.ATOMTYPES, self.CARTESIAN, nat,
                     self.FREQS, self.RMASS, self.FCONST, len(self.FREQS)
@@ -543,8 +1212,88 @@ class QRCGenerator:
         self._write_input_file(
             file_path, format_type, self.suffix, self.nproc, self.mem, route,
             self.CHARGE, self.MULT, self.ATOMTYPES, self.NEW_CARTESIAN, nat,
-            self._func, self._basis
+            self._func, self._basis, extra
         )
+
+    def _out_stem(self) -> str:
+        """Output path without the _<suffix>.<ext> ending."""
+        return str(Path(self.outdir or '.') / Path(self.file).stem)
+
+    def _paths(self, format_type: str) -> list[Path]:
+        """Files write_files writes for a given output format."""
+        stem = Path(self._out_stem())
+        ext = INPUT_EXTENSIONS.get(format_type, "xyz")
+        paths = [stem.with_name(f'{stem.name}_{self.suffix}.{ext}')]
+        if self.verbose:
+            paths.append(stem.with_name(f'{stem.name}_{self.suffix}.qrc'))
+        return paths
+
+    def output_paths(self) -> list[Path]:
+        """Return the paths write_files will write (input file, then .qrc if verbose)."""
+        format_type = self._format_type
+        if format_type is None and self._from_file:
+            format_type = OutputData(self.file).format
+        if self.xyz or format_type not in INPUT_EXTENSIONS:
+            format_type = "xyz"
+        return self._paths(format_type)
+
+    def _gaussian_route_and_tail(self, route: Optional[str]) -> tuple[str, Optional[str]]:
+        """Resolve the Gaussian route and the input to write after the geometry."""
+        if not self._from_file:
+            return route or '', None
+        route = route or ''
+        original_route = route
+        cloned = self.route is None
+        if cloned and route.strip():
+            route = minimization_route_gaussian(route)
+            if route.split() != original_route.split():
+                _print_once(
+                    f'Note - {self.file}: route changed to optimize to a minimum: '
+                    f'"{gaussian_route_line(original_route)}" -> "{gaussian_route_line(route)}" '
+                    '(set it with --route to override)'
+                )
+
+        input_file, input_route, tail = read_gaussian_input_tail(self.file)
+        needs_extra = bool(GAUSSIAN_EXTRA_INPUT.search(route))
+        if tail is not None:
+            if cloned and input_route is not None and \
+                    _normalize_route(input_route) != _normalize_route(original_route):
+                _print_once(
+                    f'Warning - {input_file} has a different route from {self.file}: '
+                    'input after its geometry was not copied'
+                )
+                tail = None
+            elif not cloned and not needs_extra:
+                tail = None
+            else:
+                _print_once(f'Note - input after the geometry copied from {input_file}')
+        if tail is None and needs_extra:
+            source = input_file or f'{Path(self.file).with_suffix("")}.com/.gjf'
+            _print_once(
+                f'Warning - the route "{gaussian_route_line(route)}" needs input after the geometry '
+                f'(basis set, ECP, ModRedundant, Read, ...) that could not be taken from '
+                f'{source}: add it to the new input file by hand'
+            )
+        return route, tail
+
+    def _orca_route_and_blocks(self, route: Optional[str]) -> tuple[str, list[str]]:
+        """Resolve the ORCA keywords and the %blocks of the original input."""
+        blocks = []
+        if self._from_file:
+            with open(self.file, encoding='utf-8', errors='replace') as f:
+                _, blocks = read_orca_input(f.readlines())
+        route = route or ''
+        if self.route is None and route.strip():
+            new_route = minimization_route_orca(route)
+            if new_route.split() != route.split():
+                _print_once(
+                    f'Note - {self.file}: keywords changed to optimize to a minimum: '
+                    f'"{route.strip()}" -> "{new_route}" (set them with --route to override)'
+                )
+            route = new_route
+        # %pal is written separately
+        route = ' '.join(tok for tok in route.split() if not re.fullmatch(r'pal\d+', tok, re.IGNORECASE))
+        return route, blocks
 
     def _write_header(
         self,
@@ -633,38 +1382,41 @@ class QRCGenerator:
         cartesians: np.ndarray,
         nat: int,
         func: Optional[str],
-        basis: Optional[str]
+        basis: Optional[str],
+        extra=None
     ) -> None:
-        """Write new computational chemistry input file."""
-        if format_type == "Gaussian":
-            input_ext = "com"
-        elif format_type in ("ORCA", "QChem"):
-            input_ext = "inp"
-        else:
-            input_ext = "com"
+        """Write new computational chemistry input file.
 
-        with Logger(file_path.stem, input_ext, suffix) as new_input:
+        Args:
+            extra: Format-specific input carried over from the original job:
+                text after the geometry (Gaussian), a list of %block lines
+                (ORCA), or ($rem lines, other $section lines) (Q-Chem).
+        """
+        input_ext = INPUT_EXTENSIONS.get(format_type, "xyz")
+
+        with Logger(self._out_stem(), input_ext, suffix) as new_input:
             if format_type == "Gaussian":
                 new_input.write(f'%chk={file_path.stem}_{suffix}.chk')
-                new_input.write(f'%nproc={nproc}\n%mem={mem}\n#{route}')
+                new_input.write(f'%nproc={nproc}\n%mem={mem}\n{gaussian_route_line(route)}')
                 new_input.write(f'\n{file_path.stem}_{suffix}\n\n{charge} {mult}')
 
             elif format_type == "ORCA":
-                # Parse memory string for ORCA
-                memory_number = re.findall(r'\d+', mem)
-                unit = re.findall(r'GB', mem)
-                if unit:
-                    mem_val = int(memory_number[0]) * 1024
-                else:
-                    mem_val = memory_number[0]
-
-                new_input.write(
-                    f'! {route}\n %pal nprocs {nproc} end\n %maxcore {mem_val}\n\n'
-                    f'# {file_path.stem}_{suffix}\n\n* xyz {charge} {mult}'
-                )
+                # %maxcore is memory per core in MB; --mem is the total
+                maxcore = max(1, memory_to_mb(mem) // max(nproc, 1))
+                new_input.write(f'! {route}\n %pal nprocs {nproc} end\n %maxcore {maxcore}')
+                if extra:
+                    new_input.write('\n'.join(extra))
+                new_input.write(f'\n# {file_path.stem}_{suffix}\n\n* xyz {charge} {mult}')
 
             elif format_type == "QChem":
                 new_input.write(f'$molecule\n{charge} {mult}')
+
+            else:
+                modes = ', '.join(str(mode + 1) for mode in sorted(self._target_modes))
+                new_input.write(
+                    f'{nat}\n{file_path.stem}_{suffix}: displaced along mode(s) {modes or "none"} '
+                    f'with amplitude {self.amplitude}'
+                )
 
             # Write coordinates
             for atom in range(nat):
@@ -676,14 +1428,24 @@ class QRCGenerator:
             # Write format-specific footer
             if format_type == "Gaussian":
                 new_input.write("")
+                if extra:
+                    new_input.write(f'{extra}\n')
             elif format_type == "ORCA":
                 new_input.write("*")
             elif format_type == "QChem":
-                new_input.write("$end\n\n$rem")
-                new_input.write(f"   JOBTYPE opt\n   METHOD {func}\n   BASIS {basis}")
-                new_input.write("$end\n\n@@@\n\n$molecule\n   read\n$end\n\n$rem")
-                new_input.write(f"   JOBTYPE freq\n   METHOD {func}\n   BASIS {basis}")
-                new_input.write("$end\n")
+                if extra is not None:
+                    rem, sections = extra
+                else:
+                    rem, sections = [f"   METHOD {func}", f"   BASIS {basis}"], []
+                for jobtype in ("opt", "freq"):
+                    if jobtype == "freq":
+                        new_input.write("\n@@@\n\n$molecule\n   read\n$end")
+                    new_input.write("$end\n\n$rem" if jobtype == "opt" else "\n$rem")
+                    new_input.write('\n'.join([f"   JOBTYPE {jobtype}"] + rem))
+                    new_input.write("$end")
+                    if sections:
+                        new_input.write('\n' + '\n'.join(sections))
+                new_input.write("")
 
 
 def g16_opt(comfile: str) -> None:
@@ -729,12 +1491,22 @@ def run_irc(
         log_output.write(f'x  Skipping {file_path.stem}_{suffix}.com due to overlap in atoms')
 
 
+def _memory_arg(mem: str) -> str:
+    """argparse type that validates a memory string and returns it unchanged."""
+    try:
+        memory_to_mb(mem)
+    except ValueError as exc:
+        raise ArgumentTypeError(str(exc)) from exc
+    return mem
+
+
 def main() -> int:
     """Main entry point for pyQRC command-line interface.
 
     Returns:
         Exit code: 0 for success, 1 if any files failed to process.
     """
+    global _SHOWN_MESSAGES  # pylint: disable=global-statement
     parser = ArgumentParser(
         description="pyQRC - a quick alternative to IRC calculations",
         usage="%(prog)s [options] <input1>.log <input2>.log ..."
@@ -753,12 +1525,13 @@ def main() -> int:
         metavar="NPROC", help=f"number of processors (default {DEFAULT_NPROC})"
     )
     parser.add_argument(
-        "--mem", dest="mem", type=str, default=DEFAULT_MEMORY,
-        metavar="MEM", help=f"memory (default {DEFAULT_MEMORY})"
+        "--mem", dest="mem", type=_memory_arg, default=DEFAULT_MEMORY,
+        metavar="MEM", help=f"total memory, e.g. 8GB or 4000MB (default {DEFAULT_MEMORY})"
     )
     parser.add_argument(
         "--route", dest="route", type=str, default=None,
-        metavar="ROUTE", help="calculation route (defaults to same as original file)"
+        metavar="ROUTE",
+        help="calculation route, used as given (default: original route changed to a minimization)"
     )
     parser.add_argument(
         "-q", "--quiet", dest="verbose", action="store_false", default=True,
@@ -766,7 +1539,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--auto", dest="auto", action="store_true", default=False,
-        help="turn on automatic batch processing"
+        help="skip files without imaginary frequencies, even with --freq/--freqnum "
+             "(without them, such files are always skipped)"
     )
     parser.add_argument(
         "--name", dest="suffix", type=str, default=DEFAULT_SUFFIX,
@@ -779,6 +1553,23 @@ def main() -> int:
     parser.add_argument(
         "--freqnum", dest="freqnum", type=int, default=None,
         metavar="FREQNUM", help="request motion along a particular frequency (number)"
+    )
+    parser.add_argument(
+        "--both", dest="both", action="store_true", default=False,
+        help="write inputs displaced in both directions (+amp and -amp), "
+             "with F and R appended to the name"
+    )
+    parser.add_argument(
+        "--xyz", dest="xyz", action="store_true", default=False,
+        help="write the displaced geometry as an .xyz file instead of an input file"
+    )
+    parser.add_argument(
+        "--outdir", dest="outdir", type=str, default=None, metavar="DIR",
+        help="directory for the new files (default: current directory)"
+    )
+    parser.add_argument(
+        "--overwrite", dest="overwrite", action="store_true", default=False,
+        help="replace existing files (by default a file is skipped if any output exists)"
     )
     parser.add_argument(
         "--qcoord", dest="qcoord", action="store_true", default=False,
@@ -808,22 +1599,25 @@ def main() -> int:
             exit_code = 1
             continue
         for file in matches:
-            if os.path.splitext(file)[1] not in ('.out', '.log'):
+            if os.path.splitext(file)[1].lower() not in ('.out', '.log'):
                 print(f'x   {file} skipped: expected a .log or .out file')
                 exit_code = 1
                 continue
             files.append(file)
     for file in files:
-        # Parse output with cclib and count imaginary frequencies
+        # Parse output and count imaginary frequencies
         try:
-            parser_cc = cclib.io.ccopen(file)
-            if parser_cc is None:
-                print(f'x   {file} could not be parsed (unknown format): skipping')
-                exit_code = 1
-                continue
-            data = parser_cc.parse()
-        except Exception as exc:
+            data = parse_output(file)
+        except QRCParseError as exc:
             print(f'x   {file} failed to parse: {exc}')
+            exit_code = 1
+            continue
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            print(f'x   {file} failed to parse ({exc}): the job may have failed or the output is incomplete')
+            exit_code = 1
+            continue
+        if data is None:
+            print(f'x   {file} could not be parsed (unknown format): skipping')
             exit_code = 1
             continue
 
@@ -831,21 +1625,54 @@ def main() -> int:
             im_freq = len([val for val in data.vibfreqs if val < 0])
         else:
             print(f'x   {file} has no frequency information: skipping')
+            exit_code = 1
             continue
 
+        mode_requested = args.freq is not None or args.freqnum is not None
         if not args.qcoord:
-            if im_freq == 0 and args.auto:
-                print(f'x   {file} has no imaginary frequencies: skipping')
+            if im_freq == 0 and (args.auto or not mode_requested):
+                hint = '' if args.auto else ' (use --freq or --freqnum to displace along a real mode)'
+                print(f'x   {file} has no imaginary frequencies: skipping{hint}')
             else:
+                if args.both:
+                    runs = [(args.amplitude, f'{args.suffix}F'), (-args.amplitude, f'{args.suffix}R')]
+                else:
+                    runs = [(args.amplitude, args.suffix)]
+                _SHOWN_MESSAGES = set()
                 try:
-                    QRCGenerator(
-                        file, args.amplitude, args.nproc, args.mem, args.route,
-                        args.verbose, args.suffix, args.freq, args.freqnum
-                    )
-                except (QRCParseError, QRCModeError) as exc:
+                    generators = [
+                        QRCGenerator(
+                            file, amplitude, args.nproc, args.mem, args.route,
+                            args.verbose, suffix, args.freq, args.freqnum, write=False,
+                            xyz=args.xyz, outdir=args.outdir, overwrite=args.overwrite
+                        )
+                        for amplitude, suffix in runs
+                    ]
+                    # Check every output first, so --both never writes half a pair
+                    existing = [str(path) for qrc in generators for path in qrc.output_paths()
+                                if path.exists()]
+                    if existing and not args.overwrite:
+                        raise QRCFileExistsError(
+                            f"{', '.join(existing)} already exist{'s' if len(existing) == 1 else ''}: "
+                            "use --overwrite to replace, or --name/--outdir to write elsewhere"
+                        )
+                    for qrc, (_, suffix) in zip(generators, runs):
+                        qrc.write_files()
+                        if qrc.OVERLAPPED:
+                            print(
+                                f'Warning - {file}: atoms are very close in the {suffix} '
+                                'structure: consider a smaller --amp'
+                            )
+                except (QRCParseError, QRCModeError, QRCFileExistsError, ValueError) as exc:
                     print(f'x   {file} failed: {exc}')
                     exit_code = 1
                     continue
+                except Exception as exc:  # pylint: disable=broad-exception-caught
+                    print(f'x   {file} failed with an unexpected error: {exc!r}')
+                    exit_code = 1
+                    continue
+                finally:
+                    _SHOWN_MESSAGES = None
 
                 if args.freq is not None:
                     print(f'o   {file} was distorted along {args.freq} cm-1')

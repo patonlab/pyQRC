@@ -1,0 +1,20 @@
+! B3LYP 6-311+G(d,p) Opt Freq
+ %pal nprocs 4 end
+ %maxcore 2048
+%geom
+  Calc_Hess true
+end
+
+# TS: SN2 identity reaction Cl- + CH3Cl -> ClCH3 + Cl-
+# C3v symmetry, collinear Cl-C-Cl; expect 1 imaginary freq (~400i cm-1)
+
+# 44_ts_sn2_identity_chloride_QRC
+
+* xyz -1 1
+Cl   0.00005640   0.00000100  -2.42208360
+ C  -0.00003200  -0.00000070   0.28862420
+Cl   0.00005280   0.00000270   2.32226280
+ H   1.07183730  -0.00000040   0.02388550
+ H  -0.53596300   0.92828220   0.02390540
+ H  -0.53596240  -0.92828240   0.02390430
+*

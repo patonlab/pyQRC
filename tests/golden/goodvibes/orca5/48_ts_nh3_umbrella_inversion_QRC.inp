@@ -1,0 +1,19 @@
+! wB97M-V 6-311+G(d,p) Opt NumFreq
+ %pal nprocs 4 end
+ %maxcore 2048
+%geom
+  Calc_Hess true
+  NumHess true
+end
+
+# TS: Ammonia umbrella inversion (D3h planar)
+# Low barrier ~5.8 kcal/mol; expect 1 imaginary freq (~1000i cm-1)
+
+# 48_ts_nh3_umbrella_inversion_QRC
+
+* xyz 0 1
+ N  -0.00005500  -0.00009600  -0.03707340
+ H   0.00008790   0.99926790   0.17182030
+ H   0.86554370  -0.49952660   0.17186410
+ H  -0.86557540  -0.49964620   0.17190760
+*

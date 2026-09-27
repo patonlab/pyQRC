@@ -27,7 +27,7 @@ unless overridden; tasks below assume them.
 | D4 | `--freq` matching semantics | **Nearest mode within ±1 cm⁻¹ (configurable), print the matched mode; no match → error, no file, exit 1.** Release as **v2.2.0** with a release note. | Frequencies are reported to ~0.1 cm⁻¹; exact float equality can never be the intended UX. Previously "successful" no-op runs becoming errors is the point of the fix. |
 | D5 | Python 3.13 support | **Yes — add 3.13 to both CI matrices and the classifiers.** | Pure-Python package; local development already happens on 3.13; risk is in cclib, which CI will reveal. |
 
-Note (D3): per the README "ORCA 6 compatibility" section, cclib 1.8.1 is incompatible with ORCA 6 parsing, so ORCA 6 support is excluded until a fixed cclib release is published.
+Note (D3): cclib 1.8.1 cannot parse ORCA 6 outputs. Since September 2026 pyQRC falls back to its own ORCA reader (`pyqrc/orca_reader.py`) when cclib fails on an ORCA file, so ORCA 6 is supported on released cclib and the ORCA 6 examples are tested fixtures. A weekly GitHub Actions job (`cclib-master.yml`) runs the suite against cclib master to catch upstream changes early.
 
 ---
 
@@ -81,8 +81,36 @@ with zero skips on release cclib. **v2.2.0 was released to PyPI on
 contain `run_g16.sh`).
 Milestone 3 is also resolved: 3.2–3.4 are done, and 3.1 was closed
 without action when D1 was resolved to deprecate `--qcoord` (v2.3.0
-warns; the mode is removed in 3.0). The roadmap is complete; the only
-follow-up is releasing v2.3.0 and, eventually, the 3.0 removal.
+warns; the mode is removed in 3.0). The roadmap is complete. v2.3.0 was not released on its own: its
+changes ship in v2.4.0 (below).
+
+## v2.4.0 — usability audit (September 2026)
+
+A second audit asked whether a general computational organic chemist can
+run pyQRC easily. It found that generated inputs often needed hand editing
+(TS keywords cloned into the QRC optimization, input after the geometry and
+ORCA/Q-Chem settings dropped, ORCA memory per core), that ORCA 6 needed
+cclib from GitHub, and that minima and existing files were handled
+silently. All of it is addressed in v2.4.0; see CHANGELOG.md for the full
+list, including the behaviour changes.
+
+| # | Task | Status |
+|---|------|--------|
+| 4.1 | Change cloned TS routes to minimizations; carry over input after the geometry, ORCA `!` lines/`%` blocks and Q-Chem `$rem`/sections | ✅ |
+| 4.2 | Total-memory `--mem` (ORCA `%maxcore` per core); `.xyz` fallback and `--xyz`; `--both`; default `--amp 0.3` | ✅ |
+| 4.3 | Read ORCA 6 with released cclib (`pyqrc/orca_reader.py`); weekly CI on cclib master | ✅ |
+| 4.4 | Skip minima unless a mode is requested; `--outdir`; no overwriting without `--overwrite` | ✅ |
+| 4.5 | `QRCGenerator.from_arrays()` / `from_ase()` | ✅ |
+| 4.6 | Golden-file tests, problem-output tests, notebooks in CI (nbval) | ✅ |
+| 4.7 | Real fixtures from the GoodVibes test suite (fixed: ORCA dropping imaginary modes, Q-Chem ECP charge, xTB charge, nitrile clash warning) | ✅ |
+| 4.8 | Release v2.4.0 | Pending: merge, then publish |
+
+**Open items**
+
+- A real Gaussian `opt=modredundant` fixture (tests use an edited copy).
+- The ASE/MLIP notebook is not run in CI (needs `mace-torch` and a model download).
+- ORCA QM/QM2 outputs print only the QM-region geometry before the frequencies and are rejected with a message.
+- **3.0:** remove `--qcoord`/`--nummodes`, `run_g16.sh`, `g16_opt` and `run_irc`.
 
 ## Releasing
 

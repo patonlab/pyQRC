@@ -12,7 +12,7 @@
 
 QRC is an abbreviation of **Quick Reaction Coordinate**. This provides a quick alternative to IRC (intrinsic reaction coordinate) calculations. This was first described by Silva and Goodman.<sup>1</sup> The [original code](http://www-jmg.ch.cam.ac.uk/software/QRC/) was developed in Java for Jaguar output files. This Python version uses [cclib](https://cclib.github.io/) to process a variety of computational chemistry outputs.
 
-The program will read a Gaussian frequency calculation and will create a new input file which has been projected from the final coordinates along the Hessian eigenvector with a negative force constant. The magnitude of displacement can be adjusted on the command line. By default the projection will be in a positive sense (in relation to the imaginary normal mode) and the level of theory in the new input file will match that of the frequency calculation.
+The program will read a Gaussian frequency calculation and will create a new input file which has been projected from the final coordinates along the Hessian eigenvector with a negative force constant. The magnitude of displacement can be adjusted on the command line. By default the projection will be in a positive sense (in relation to the imaginary normal mode) and the level of theory in the new input file will match that of the frequency calculation. The new input is set up to optimize to a minimum: saddle-point keywords from the original job (e.g. Gaussian `opt=(ts,noeigentest)`, ORCA `OptTS`) are replaced, and everything else in the original input — basis-set and ECP sections, solvation settings, constraints — is carried over (see [New input files](#new-input-files)).
 
 In addition to a pound-shop (dollar store) IRC calculation, a common application for pyQRC is in distorting ground state structures to remove annoying imaginary frequencies after reoptimization. This code has, in some form or other, been in use since around 2010.
 
@@ -29,6 +29,9 @@ python -m pyqrc my_ts.log
 
 # Specify processors and memory for the new input file
 python -m pyqrc my_ts.log --nproc 4 --mem 8GB
+
+# QRC from a transition state: inputs displaced in both directions
+python -m pyqrc my_ts.log --both --nproc 4 --mem 8GB
 ```
 
 ## Installation
@@ -53,16 +56,9 @@ Clone the repository https://github.com/patonlab/pyQRC.git and add to your PYTHO
 
 ### ORCA 6 compatibility
 
-Parsing ORCA 6 output files requires a newer cclib than the current PyPI release (1.8.1), which fails on ORCA 6's SCF block. Until cclib ships a release with the fix, install cclib from GitHub master alongside pyQRC:
+ORCA 6 outputs work with a plain `pip install pyqrc`. The current cclib release (1.8.1) cannot read ORCA 6 outputs, so pyQRC reads ORCA files that cclib fails on with its own ORCA reader, which extracts the final geometry, charge, multiplicity, frequencies and normal modes. It gives identical results to cclib on ORCA 5 outputs and to cclib's development version on ORCA 6 outputs, and cclib is still used whenever it can read the file.
 
-```bash
-pip install pyqrc
-pip install --upgrade 'git+https://github.com/cclib/cclib.git'
-```
-
-Note: cclib master currently has a regression affecting some Q-Chem outputs. If you primarily use Q-Chem, stay on cclib 1.8.1.
-
-Then run the script as a Python module with your computational chemistry output files (the program expects `.log` or `.out` extensions) and can accept wildcard arguments.
+Then run the script as a Python module with your computational chemistry output files (the program expects `.log` or `.out` extensions, in any case) and can accept wildcard arguments.
 
 ## Usage
 
@@ -74,33 +70,46 @@ python -m pyqrc [options] <output_file(s)>
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--amp AMPLITUDE` | Multiplier for the imaginary normal mode vector. Increase for larger displacements; use negative values for reverse direction. | `0.2` |
+| `--amp AMPLITUDE` | Multiplier for the imaginary normal mode vector. Increase for larger displacements; use negative values for reverse direction. | `0.3` |
 | `--nproc NPROC` | Number of processors requested in the new input file. | `1` |
-| `--mem MEM` | Memory requested in the new input file. Format: `XGB` or `X000MB`. | `4GB` |
-| `--route ROUTE` | Route line for the new calculation, e.g. `'THEORY/BASIS opt'`. | Same as original |
+| `--mem MEM` | Total memory requested in the new input file, e.g. `8GB` or `4000MB` (case-insensitive). For ORCA this is divided by `--nproc` to give `%maxcore`, which is per core. | `4GB` |
+| `--route ROUTE` | Route line (Gaussian) or `!` keywords (ORCA) for the new calculation, used exactly as given, e.g. `'THEORY/BASIS opt'`. Ignored for Q-Chem. | Original, changed to a minimization |
 | `-q, --quiet` | Suppress verbose output (skips the `.qrc` summary file). | Verbose by default |
-| `--auto` | Only process files with imaginary frequencies, skip others. | Disabled |
+| `--auto` | Skip files without imaginary frequencies even when `--freq`/`--freqnum` is given. Without those options, such files are always skipped. | Disabled |
 | `--name SUFFIX` | String appended to the filename for new input file(s). | `QRC` |
 | `-f, --freq FREQ` | Displace along the normal mode nearest this frequency (cm⁻¹); errors if no mode is within 1 cm⁻¹. | All imaginary |
 | `--freqnum FREQNUM` | Displace along frequency number N (from lowest); errors if N exceeds the number of modes. | All imaginary |
+| `--both` | Write two inputs, displaced by `+AMPLITUDE` and `-AMPLITUDE`, with `F` and `R` appended to the name (`<filename>_QRCF`, `<filename>_QRCR`). | Disabled |
+| `--xyz` | Write the displaced geometry as an `.xyz` file instead of an input file. | Disabled |
+| `--outdir DIR` | Directory for the new files, created if needed. | Current directory |
+| `--overwrite` | Replace existing files. Without it, a file whose outputs (any of them, with `--both`) already exist is skipped with an error, and nothing is written for it. | Disabled |
 | `--qcoord` | **Deprecated, removal in 3.0.** Runs Gaussian single points along normal modes directly on the local machine (requires `g16` on `PATH`). Generate inputs with the default mode and submit them through your scheduler instead. | Disabled |
 | `--nummodes NUMMODES` | **Deprecated, removal in 3.0.** Number of modes for `--qcoord` calculations. | `all` |
 
 ## Output Files
 
-pyQRC generates the following files:
+Files without imaginary frequencies are skipped unless `--freq` or `--freqnum` asks for a particular mode, since there is nothing to displace along. For each file processed, pyQRC generates the following in the current directory (or `--outdir`), and never replaces existing files unless `--overwrite` is given:
 
 - **`<filename>_QRC.com`** (Gaussian) or **`<filename>_QRC.inp`** (ORCA/Q-Chem): New input file with displaced geometry ready for optimization.
+- **`<filename>_QRC.xyz`**: Displaced geometry, written instead of an input file with `--xyz`, or for outputs from other programs that cclib reads (e.g. Psi4, NWChem, Turbomole) since pyQRC cannot write their inputs.
 - **`<filename>_QRC.qrc`**: Summary file containing:
   - Original geometry
   - Harmonic frequencies, reduced masses, and force constants
   - Normal mode displacement vectors
   - Mass-weighted Cartesian displacement magnitude
 
+### New input files
+
+Unless `--route` is given, the new input repeats the original calculation but is set up to optimize to a minimum, so that a QRC from a transition state relaxes to the reactant or product instead of searching for the TS again. A note is printed whenever the route is changed:
+
+- **Gaussian:** `ts`, `saddle=N`, `qst2`/`qst3`, `noeigentest` and `readfc` are removed from the `opt` options, and `guess=read` is removed (the new job has no checkpoint to read). `opt` is added to a frequency-only route. Input that follows the geometry — `Gen`/`GenECP` basis sets and ECPs, ModRedundant lines, `SCRF=Read` input — is not in the Gaussian output, so it is copied from the original input file, `<filename>.com` or `<filename>.gjf` next to the output, when that file has the same route. With `--route`, these sections are copied only if the new route needs them (e.g. it uses `Gen`). If the route needs such input and no matching file is found, pyQRC prints a warning so it can be added by hand.
+- **ORCA:** `OptTS` becomes `Opt` (and `Opt` is added if the job had no optimization). All `!` lines and `%` blocks (`%cpcm`, `%basis`, `%scf`, `%geom`, ...) are copied from the input that ORCA echoes at the top of the output; `%pal` and `%maxcore` come from `--nproc` and `--mem`. The `%` blocks are also copied when `--route` is given.
+- **Q-Chem:** an optimization followed by a frequency job, both with every `$rem` setting and extra section (`$smx`, `$solvent`, `$basis`, ...) of the original frequency job, taken from the input Q-Chem echoes in its output.
+
 ## Dependencies
 
 - [Python](https://www.python.org/) >= 3.9
-- [cclib](https://cclib.github.io/) >= 1.8.1, < 2 (ORCA 6 outputs need a newer cclib than 1.8.1 — see "ORCA 6 compatibility" above)
+- [cclib](https://cclib.github.io/) >= 1.8.1, < 2 (ORCA 6 outputs are read by pyQRC's own ORCA reader — see "ORCA 6 compatibility" above)
 - [NumPy](https://numpy.org/) >= 1.22
 - One of the following computational chemistry packages:
   - [Gaussian09](https://gaussian.com/glossary/g09/) / [Gaussian16](https://gaussian.com/gaussian16/)
@@ -122,11 +131,10 @@ This initial optimization inadvertently produced a transition structure. The cod
 ### Example 2: Map a Reaction Coordinate (QRC)
 
 ```bash
-python -m pyqrc claisen_ts.log --nproc 4 --mem 8GB --amp 0.3 --name QRCF
-python -m pyqrc claisen_ts.log --nproc 4 --mem 8GB --amp -0.3 --name QRCR
+python -m pyqrc claisen_ts.log --nproc 4 --mem 8GB --both
 ```
 
-The initial optimization located a transition structure. The quick reaction coordinate (QRC) is obtained from two optimizations, started from two points displaced along the reaction coordinate in either direction.
+The initial optimization located a transition structure. The quick reaction coordinate (QRC) is obtained from two optimizations, started from two points displaced along the reaction coordinate in either direction: `--both` writes `claisen_ts_QRCF.com` (`--amp 0.3`) and `claisen_ts_QRCR.com` (`--amp -0.3`). The original job was a TS optimization, `opt(ts,calcfc,noeigentest)`, so the new inputs use `opt=calcfc` to relax to the minima on either side. The same two files can be written separately with `--amp 0.3 --name QRCF` and `--amp -0.3 --name QRCR`.
 
 ### Example 3: Conformational Sampling via Normal Mode Displacement
 
@@ -139,7 +147,31 @@ In this example, the initial optimization located a (3rd order) saddle point - p
 
 ### Example 4: QRC from an ASE / MLIP Frequency Calculation
 
-When the Hessian comes from a machine-learned interatomic potential driven through [ASE](https://wiki.fysik.dtu.dk/ase/) rather than a QM package, there is no output file for pyQRC to read. The helper script [`examples/ase_mlip/ase2gaussian.py`](examples/ase_mlip/ase2gaussian.py) bridges the gap: it writes an ASE `Vibrations` result as a Gaussian-format log file that cclib parses, after which pyQRC works exactly as in the examples above. The accompanying [notebook](examples/ase_mlip/generate_qrc_inputs.ipynb) walks through the full loop with [MACE-OFF](https://github.com/ACEsuit/mace): locating the planar NH₃ inversion transition state and relaxing the QRC-displaced geometry to the pyramidal minimum, then mapping the Claisen reaction coordinate of Example 2 entirely on the MLIP — the forward and reverse QRC displacements from the DFT transition state relax to 4-pentenal and allyl vinyl ether without any further QM calculations.
+When the Hessian comes from a machine-learned interatomic potential driven through [ASE](https://wiki.fysik.dtu.dk/ase/) rather than a QM package, there is no output file for pyQRC to read. `QRCGenerator.from_ase` takes the ASE `Vibrations` object directly (see [Python API](#python-api)). To use the command line instead, the helper script [`examples/ase_mlip/ase2gaussian.py`](examples/ase_mlip/ase2gaussian.py) writes an ASE `Vibrations` result as a Gaussian-format log file that cclib parses, after which pyQRC works exactly as in the examples above. The accompanying [notebook](examples/ase_mlip/generate_qrc_inputs.ipynb) walks through the full loop with [MACE-OFF](https://github.com/ACEsuit/mace): locating the planar NH₃ inversion transition state and relaxing the QRC-displaced geometry to the pyramidal minimum, then mapping the Claisen reaction coordinate of Example 2 entirely on the MLIP — the forward and reverse QRC displacements from the DFT transition state relax to 4-pentenal and allyl vinyl ether without any further QM calculations.
+
+## Python API
+
+The command line wraps `QRCGenerator`, which can also be used directly:
+
+```python
+from pyqrc import QRCGenerator
+
+# From an output file; write=False computes without writing files
+qrc = QRCGenerator("claisen_ts.log", amplitude=0.3, nproc=4, mem="8GB", route=None,
+                   verbose=False, suffix="QRC", val=None, num=None, write=False)
+print(qrc.NEW_CARTESIAN)       # displaced geometry (Angstrom)
+print(qrc.output_paths())      # files write_files() would write
+qrc.write_files()
+
+# From arrays, e.g. frequencies from another program
+qrc = QRCGenerator.from_arrays(atomnos, coords, freqs, modes, amplitude=0.3)
+
+# From an ASE Vibrations run (ASE is not a pyQRC dependency)
+qrc = QRCGenerator.from_ase(vib, amplitude=0.3)
+atoms.positions = qrc.NEW_CARTESIAN
+```
+
+`from_arrays` takes atomic numbers, coordinates (Å), frequencies (cm⁻¹, negative for imaginary modes, without translations and rotations) and the matching Cartesian displacement vectors, which are normalized as Gaussian and ORCA print them, so amplitudes mean the same as for output files. It accepts the same `amplitude`, `num` and `val` as the file-based generator. By default it only computes; with `write=True` it writes an `.xyz` file, or a Gaussian or ORCA input when `program` and `route` are given. `from_ase` passes its keyword arguments on to `from_arrays`.
 
 ## Comparison with IRC
 
@@ -161,9 +193,16 @@ cd pyQRC
 pip install -e ".[dev]"
 pytest            # run the test suite
 pylint pyqrc      # lint (CI requires a score >= 9.0)
+pytest --nbval --nbval-sanitize-with examples/nbval_sanitize.cfg examples/g16 examples/orca5 examples/orca6 examples/qchem   # check the notebooks
 ```
 
-Planned work is tracked in [ROADMAP.md](ROADMAP.md).
+**Golden files.** `tests/test_golden.py` runs every example output in `examples/` through pyQRC and compares the input it writes with a reference copy in `tests/golden/`, so any change to generated inputs shows up as a diff. After an intended change, or to add an example, run `pytest tests/test_golden.py --update-golden`, review the changed files in `tests/golden/`, and commit them.
+
+**Adding an example output.** Put the output in `examples/<program>/` (for Gaussian, also the `.com` or `.gjf` input with the same name, so input after the geometry is tested) and generate its golden file as above. It is then included in all example-based tests automatically. Real outputs that exercise less common input are especially welcome: Gen/GenECP basis sets, ModRedundant constraints, solvation, open-shell and charged species.
+
+**Notebooks.** The example notebooks' saved outputs are checked in CI with `nbval`, so re-run a notebook and commit it when its output changes. The ASE/MLIP notebook needs `mace-torch` and is not run in CI.
+
+Changes between releases are listed in [CHANGELOG.md](CHANGELOG.md); planned work is tracked in [ROADMAP.md](ROADMAP.md).
 
 ## Citation
 

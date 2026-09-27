@@ -1,0 +1,26 @@
+$molecule
+0 1
+ N   0.00000000  -0.03720000   0.00000119
+ H   0.00000000   0.17190000   0.99878005
+ H   0.86478894   0.17190000  -0.49939499
+ H  -0.86478894   0.17190000  -0.49939499
+$end
+
+$rem
+   JOBTYPE opt
+   METHOD    mp2
+   BASIS    6-311+G(d,p)
+$end
+
+@@@
+
+$molecule
+   read
+$end
+
+$rem
+   JOBTYPE freq
+   METHOD    mp2
+   BASIS    6-311+G(d,p)
+$end
+

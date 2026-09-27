@@ -11,41 +11,27 @@ Only the blocks cclib and pyQRC actually read are written: the route
 section, charge/multiplicity, the Standard orientation table, the harmonic
 frequency block (3 modes per column group, Gaussian layout), and the normal
 termination line.
+
+To get the displaced geometry without writing a file, use
+``pyqrc.QRCGenerator.from_ase(vib)`` instead.
 """
 
 import numpy as np
 
+from pyqrc import vibrations_from_ase
+
 CM1_TO_MDYNE_PER_A = 5.89141e-7  # k = mu * (2*pi*c*nu)^2 in mDyne/A with amu, cm-1
-EV_TO_CM1 = 8065.54429
 
 
 def extract_vibrations(vib, min_freq=100.0):
     """Pull true vibrational modes out of an ase.vibrations.Vibrations run.
 
-    ASE returns all 3N modes including translations/rotations (near-zero
-    frequencies) and reports imaginary modes as complex energies. This
-    converts to the Gaussian convention pyQRC expects: signed wavenumbers
-    (negative = imaginary) with the trans/rot modes dropped, leaving the
-    3N-6(5) true vibrations.
-
-    Args:
-        vib: A completed ase.vibrations.Vibrations object.
-        min_freq: Modes with |frequency| below this (cm-1) are discarded
-            as translations/rotations. Raise it if your structure is far
-            from stationary; lower it for floppy systems with genuine
-            low-frequency modes.
-
-    Returns:
-        (frequencies, modes): signed wavenumbers in cm-1 sorted ascending,
-        and the matching (nmodes, natoms, 3) Cartesian displacements.
+    Kept for existing scripts: this is pyqrc.vibrations_from_ase, which
+    returns signed wavenumbers (negative = imaginary) with the near-zero
+    translation/rotation modes (|freq| < min_freq cm-1) dropped, and the
+    matching (nmodes, natoms, 3) Cartesian displacements.
     """
-    energies = np.asarray(vib.get_energies())  # eV, complex for imaginary
-    wavenumbers = energies * EV_TO_CM1
-    freqs = np.where(np.abs(wavenumbers.imag) > 1e-6,
-                     -np.abs(wavenumbers.imag), wavenumbers.real)
-    modes = np.array([vib.get_mode(i) for i in range(len(freqs))])
-    keep = np.abs(freqs) > min_freq
-    return freqs[keep], modes[keep]
+    return vibrations_from_ase(vib, min_freq)
 
 
 def write_gaussian_freq_log(filename, atoms, frequencies, modes,

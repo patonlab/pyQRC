@@ -51,11 +51,13 @@ def get_all_example_files():
         for f in g16_path.glob('*.log'):
             examples.append((f, 'Gaussian'))
 
-    # ORCA files (.out) - using orca5 for better cclib compatibility
-    orca_path = EXAMPLES_PATH / 'orca5'
-    if orca_path.exists():
-        for f in orca_path.glob('*.out'):
-            examples.append((f, 'ORCA'))
+    # ORCA 5 and ORCA 6 files (.out); cclib releases cannot read ORCA 6,
+    # so those go through pyQRC's own ORCA reader
+    for orca_dir in ('orca5', 'orca6'):
+        orca_path = EXAMPLES_PATH / orca_dir
+        if orca_path.exists():
+            for f in orca_path.glob('*.out'):
+                examples.append((f, 'ORCA'))
 
     # Q-Chem files (.out)
     qchem_path = EXAMPLES_PATH / 'qchem'
@@ -94,8 +96,8 @@ def get_example_files_by_type(file_type: str):
                 filtered.append((filepath, fmt))
 
         elif file_type == 'ts':
-            # Claisen TS files
-            if 'claisen_ts' in name:
+            # Claisen TS files and other *_TS files
+            if 'claisen_ts' in name or name.endswith('_ts'):
                 filtered.append((filepath, fmt))
 
         elif file_type == 'saddle':
@@ -138,6 +140,24 @@ def orca_claisen_ts():
 
 
 @pytest.fixture
+def orca6_acetaldehyde():
+    """ORCA 6 acetaldehyde frequency output."""
+    return datapath('orca6/acetaldehyde.out')
+
+
+@pytest.fixture
+def orca6_claisen_ts():
+    """ORCA 6 Claisen TS frequency output."""
+    return datapath('orca6/claisen_ts.out')
+
+
+@pytest.fixture
+def orca6_alkyne_ts():
+    """ORCA 6.1 transition state with 130 atoms."""
+    return datapath('orca6/full_alkyne_TS.out')
+
+
+@pytest.fixture
 def qchem_acetaldehyde():
     """Q-Chem acetaldehyde frequency output."""
     return datapath('qchem/acetaldehyde.out')
@@ -160,7 +180,7 @@ def _params(files):
     """Build pytest params, skipping Q-Chem entries on cclib dev builds."""
     return [
         pytest.param(
-            str(f), fmt, id=f.stem,
+            str(f), fmt, id=f'{f.parent.name}/{f.stem}',
             marks=[QCHEM_DEV_CCLIB_SKIP] if fmt == 'QChem' else []
         )
         for f, fmt in files
@@ -185,3 +205,42 @@ def pytest_generate_tests(metafunc):
         saddle_files = get_example_files_by_type('saddle')
         if saddle_files:
             metafunc.parametrize('saddle_file,saddle_format', _params(saddle_files))
+
+
+GOLDEN_PATH = Path(__file__).parent / 'golden'
+
+
+def pytest_addoption(parser):
+    """--update-golden rewrites tests/golden from the current code."""
+    parser.addoption(
+        '--update-golden', action='store_true', default=False,
+        help='rewrite the expected pyQRC inputs in tests/golden instead of comparing',
+    )
+
+
+@pytest.fixture
+def update_golden(request):
+    """True when pytest was run with --update-golden."""
+    return request.config.getoption('--update-golden')
+
+
+# Real outputs from the GoodVibes test suite (see tests/data/goodvibes/README.md)
+GOODVIBES_PATH = Path(__file__).parent / 'data' / 'goodvibes'
+GOODVIBES_FORMATS = {'g16': 'Gaussian', 'orca5': 'ORCA', 'orca6': 'ORCA', 'qchem6': 'QChem'}
+
+
+def get_goodvibes_files():
+    """Return (path, format) for every GoodVibes output in tests/data/goodvibes."""
+    return [
+        (path, fmt)
+        for directory, fmt in GOODVIBES_FORMATS.items()
+        for path in sorted((GOODVIBES_PATH / directory).glob('*'))
+        if path.suffix in ('.log', '.out')
+    ]
+
+
+def golden_name(path: Path) -> str:
+    """Golden-file directory for an output: <program dir>, or goodvibes/<program dir>."""
+    if GOODVIBES_PATH in path.parents:
+        return f'goodvibes/{path.parent.name}'
+    return path.parent.name

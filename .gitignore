@@ -99,3 +99,6 @@ irc_comparison/irc/failed/
 
 # Scratch directories created by the example notebooks
 examples/*/scratch/
+
+# Expected pyQRC inputs for the golden-file tests are committed
+!tests/golden/**

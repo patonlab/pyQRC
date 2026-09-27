@@ -4,12 +4,13 @@
 import os
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
 import pytest
 
-from tests.conftest import QCHEM_DEV_CCLIB_SKIP
+from tests.conftest import QCHEM_DEV_CCLIB_SKIP, datapath
 from pyqrc.pyQRC import (
     ATOMIC_MASSES,
     COVALENT_RADII,
@@ -1273,11 +1274,11 @@ class TestRunIRC:
         options = Namespace(nproc=1, mem="4GB", verbose=False)
 
         with patch('pyqrc.pyQRC.g16_opt') as mock_g16:
-            with patch('pyqrc.pyQRC.check_overlap', return_value=True):
-                log = Logger("test", "dat", "irc2")
-                run_irc(str(local_file), options, 1, 0.2, None, "test_overlap", log)
-                mock_g16.assert_not_called()
-                log.close()
+            log = Logger("test", "dat", "irc2")
+            # A huge displacement along the TS mode creates atom clashes
+            run_irc(str(local_file), options, 1, 5.0, None, "test_overlap", log)
+            mock_g16.assert_not_called()
+            log.close()
 
 
 class TestMainNoFreqInfo:
@@ -1309,7 +1310,7 @@ class TestMainNoFreqInfo:
 
         captured = capsys.readouterr()
         assert 'no frequency information' in captured.out
-        assert exit_code == 0
+        assert exit_code == 1  # not a frequency output: probably the wrong file
 
 
 class TestUnknownFormat:
@@ -1464,10 +1465,10 @@ class TestMainCclibException:
 
 
 class TestUnknownFormatFallback:
-    """Tests for unknown format fallback to .com extension."""
+    """Tests for unknown format fallback to an .xyz file."""
 
-    def test_unknown_format_writes_com(self, g16_acetaldehyde, tmp_path, monkeypatch):
-        """Test that an unrecognized format falls back to .com extension."""
+    def test_unknown_format_writes_xyz(self, g16_acetaldehyde, tmp_path, monkeypatch):
+        """Test that an unrecognized format falls back to an .xyz file."""
 
         monkeypatch.chdir(tmp_path)
         shutil.copy(g16_acetaldehyde, tmp_path)
@@ -1508,8 +1509,11 @@ class TestUnknownFormatFallback:
                     route="opt freq", verbose=False, suffix="QRC_uf", val=None, num=None
                 )
 
-        # Unknown format should default to .com
-        assert (tmp_path / f"{local_file.stem}_QRC_uf.com").exists()
+        # Unknown format should fall back to an .xyz file, not a malformed .com
+        assert not (tmp_path / f"{local_file.stem}_QRC_uf.com").exists()
+        lines = (tmp_path / f"{local_file.stem}_QRC_uf.xyz").read_text().splitlines()
+        assert int(lines[0]) == qrc.NATOMS
+        assert len(lines) == qrc.NATOMS + 2
 
 
 class TestQcoordMode:
@@ -1728,7 +1732,10 @@ class TestComputeOnly:
 
 
 class TestQChemMissingMetadata:
-    """Q-Chem inputs must never be written with METHOD None/BASIS None."""
+    """Q-Chem inputs must never be written with METHOD None/BASIS None.
+
+    These cover the fallback used when the output does not echo the input.
+    """
 
     @QCHEM_DEV_CCLIB_SKIP
     def test_missing_method_raises_before_writing(
@@ -1752,8 +1759,10 @@ class TestQChemMissingMetadata:
         )
         qrc._func = None
 
-        with pytest.raises(QRCParseError, match="METHOD None"):
-            qrc.write_files()
+        # Without the echoed input, cclib metadata is the only source
+        with patch('pyqrc.pyQRC.read_qchem_input', return_value=None):
+            with pytest.raises(QRCParseError, match="METHOD None"):
+                qrc.write_files()
 
         assert not (temp_workdir / f"{local_file.stem}_QRC.inp").exists()
         assert not (temp_workdir / f"{local_file.stem}_QRC.qrc").exists()
@@ -1780,8 +1789,10 @@ class TestQChemMissingMetadata:
         )
         qrc._basis = None
 
-        with pytest.raises(QRCParseError, match="basis"):
-            qrc.write_files()
+        # Without the echoed input, cclib metadata is the only source
+        with patch('pyqrc.pyQRC.read_qchem_input', return_value=None):
+            with pytest.raises(QRCParseError, match="basis"):
+                qrc.write_files()
 
         assert not (temp_workdir / f"{local_file.stem}_QRC.inp").exists()
 
@@ -1928,3 +1939,750 @@ class TestAseMlipBridge:
         assert len(freqs) == 3, "near-zero trans/rot modes should be dropped"
         assert modes.shape == (3, 2, 3)
         np.testing.assert_allclose(modes[:, 0, 0], [1.0, 4.0, 5.0])
+
+
+# --- Minimization routes, carried-over input, memory and CLI conveniences ---
+
+from pyqrc.pyQRC import (  # noqa: E402  pylint: disable=wrong-import-position
+    DEFAULT_AMPLITUDE,
+    gaussian_route_line,
+    memory_to_mb,
+    minimization_route_gaussian,
+    minimization_route_orca,
+    read_gaussian_input_tail,
+    read_orca_input,
+    read_qchem_input,
+)
+
+GENECP_ROUTE = '#p opt=(ts,calcfc,noeigentest,modredundant) freq b3lyp/genecp guess=read geom=connectivity'
+
+
+def _make_gaussian_pair(g16_claisen_ts, directory, route=GENECP_ROUTE, tail=True, stem='ts'):
+    """Write a Claisen TS log with a modified route and a matching .gjf input."""
+    original = ' # opt(ts,calcfc,noeigentest) freq=noraman wb97xd/6-31+G*'
+    log_text = Path(g16_claisen_ts).read_text()
+    assert original in log_text
+    log = directory / f'{stem}.log'
+    log.write_text(log_text.replace(original, ' ' + route, 1))
+    if tail:
+        com = Path(str(g16_claisen_ts).replace('.log', '.com')).read_text().splitlines()
+        com = [route if line.startswith('#') else line for line in com]
+        text = '\n'.join(com).rstrip('\n')
+        text += '\n\n 1 2 1.0\n 2\n 3\n\nB 1 4 F\n\nC H O 0\n6-31G(d)\n****\n\n'
+        text += '--Link1--\n%chk=x\n# freq geom=check\n\nnext job\n\n0 1\n\n'
+        (directory / f'{stem}.gjf').write_text(text)
+    return log
+
+
+class TestMemory:
+    """Memory strings are parsed consistently and ORCA gets memory per core."""
+
+    @pytest.mark.parametrize('mem,expected', [
+        ('8GB', 8192), ('8gb', 8192), ('4000MB', 4000), ('1.5GB', 1536),
+        ('3000', 3000), ('1GW', 8192), (' 2 GB ', 2048),
+    ])
+    def test_memory_to_mb(self, mem, expected):
+        assert memory_to_mb(mem) == expected
+
+    @pytest.mark.parametrize('mem', ['lots', '8XB', '', 'GB'])
+    def test_invalid_memory_raises(self, mem):
+        with pytest.raises(ValueError):
+            memory_to_mb(mem)
+
+    def test_orca_maxcore_is_per_core(self, orca_acetaldehyde, temp_workdir):
+        """--mem is the total: 8GB over 4 cores is %maxcore 2048."""
+        QRCGenerator(str(orca_acetaldehyde), 0.3, 4, '8GB', None, False, 'QRC', None, None)
+        assert '%maxcore 2048' in (temp_workdir / 'acetaldehyde_QRC.inp').read_text()
+
+    def test_cli_rejects_bad_memory(self, g16_acetaldehyde, temp_workdir, monkeypatch):
+        monkeypatch.setattr('sys.argv', ['pyqrc', str(g16_acetaldehyde), '--mem', 'lots'])
+        with pytest.raises(SystemExit):
+            main()
+
+
+class TestMinimizationRoutes:
+    """Cloned routes are changed to optimize to a minimum."""
+
+    @pytest.mark.parametrize('route,expected', [
+        ('opt(ts,calcfc,noeigentest) freq=noraman wb97xd/6-31+G*', 'opt=calcfc freq=noraman wb97xd/6-31+G*'),
+        ('p Opt=(TS,NoEigenTest) b3lyp/6-31g(d)', 'p Opt b3lyp/6-31g(d)'),
+        ('opt=(saddle=2,maxcycles=50) m062x/def2svp', 'opt=maxcycles=50 m062x/def2svp'),
+        ('opt=(readfc,ts) freq b3lyp/gen guess=read', 'opt freq b3lyp/gen'),
+        ('opt freq m062x/6-31g(d)', 'opt freq m062x/6-31g(d)'),
+        ('freq b3lyp/6-31g(d)', 'opt freq b3lyp/6-31g(d)'),
+        ('p freq b3lyp/6-31g(d) scrf=(smd,solvent=water)', 'p opt freq b3lyp/6-31g(d) scrf=(smd,solvent=water)'),
+        ('opt=(ts,modredundant) guess=(read,mix)', 'opt=modredundant guess=mix'),
+    ])
+    def test_gaussian(self, route, expected):
+        assert minimization_route_gaussian(route) == expected
+
+    @pytest.mark.parametrize('route,expected', [
+        ('wB97X-D3 def2-SVP OptTS Freq', 'wB97X-D3 def2-SVP Opt Freq'),
+        ('optts wb97x-d3 def2-svp rijcosx freq', 'Opt wb97x-d3 def2-svp rijcosx freq'),
+        ('M062X def2-TZVP Opt Freq', 'M062X def2-TZVP Opt Freq'),
+        ('r2SCAN-3c TightOpt', 'r2SCAN-3c TightOpt'),
+        ('B3LYP def2-SVP Freq', 'B3LYP def2-SVP Freq Opt'),
+    ])
+    def test_orca(self, route, expected):
+        assert minimization_route_orca(route) == expected
+
+    @pytest.mark.parametrize('route,expected', [
+        (' opt freq', '# opt freq'), ('p opt', '#p opt'), ('#p opt', '#p opt'),
+        ('# opt', '# opt'), ('b3lyp/6-31g(d) opt', '# b3lyp/6-31g(d) opt'),
+    ])
+    def test_gaussian_route_line(self, route, expected):
+        assert gaussian_route_line(route) == expected
+
+    def test_cloned_gaussian_ts_route_becomes_opt(self, g16_claisen_ts, temp_workdir, capsys):
+        QRCGenerator(str(g16_claisen_ts), 0.3, 1, '4GB', None, False, 'QRC', None, None)
+        content = (temp_workdir / 'claisen_ts_QRC.com').read_text()
+        assert '# opt=calcfc freq=noraman wb97xd/6-31+G*' in content
+        assert 'ts' not in content.splitlines()[3].lower()
+        assert 'route changed to optimize to a minimum' in capsys.readouterr().out
+
+    def test_cloned_orca_ts_keywords_become_opt(self, orca_claisen_ts, temp_workdir):
+        QRCGenerator(str(orca_claisen_ts), 0.3, 1, '4GB', None, False, 'QRC', None, None)
+        first = (temp_workdir / 'claisen_ts_QRC.inp').read_text().splitlines()[0]
+        assert first == '! wB97X-D3 def2-SVP Opt Freq'
+
+    def test_user_route_used_verbatim(self, g16_claisen_ts, temp_workdir):
+        """A --route is never modified, and a leading '#' is not doubled."""
+        QRCGenerator(str(g16_claisen_ts), 0.3, 1, '4GB', '#p opt=(ts,calcfc) b3lyp/6-31g(d)',
+                     False, 'QRC', None, None)
+        lines = (temp_workdir / 'claisen_ts_QRC.com').read_text().splitlines()
+        assert lines[3] == '#p opt=(ts,calcfc) b3lyp/6-31g(d)'
+
+
+class TestGaussianInputTail:
+    """Input after the geometry is taken from the original .com/.gjf."""
+
+    def test_read_tail(self, g16_claisen_ts, tmp_path):
+        log = _make_gaussian_pair(g16_claisen_ts, tmp_path)
+        input_file, route, tail = read_gaussian_input_tail(str(log))
+        assert input_file.endswith('ts.gjf')
+        assert 'genecp' in route
+        # Connectivity section dropped (geom= is not carried over), Link1 job ignored
+        assert tail == 'B 1 4 F\n\nC H O 0\n6-31G(d)\n****'
+
+    def test_no_input_file(self, g16_claisen_ts, tmp_path):
+        log = _make_gaussian_pair(g16_claisen_ts, tmp_path, tail=False)
+        assert read_gaussian_input_tail(str(log)) == (None, None, None)
+
+    def test_zmatrix_input_not_copied(self, tmp_path):
+        (tmp_path / 'z.log').write_text('')
+        (tmp_path / 'z.com').write_text(
+            '# opt b3lyp/gen\n\nt\n\n0 1\nO\nH 1 R\nH 1 R 2 A\n\n'
+            'R 0.96\nA 104.5\n\nH O 0\n6-31G\n****\n\n'
+        )
+        input_file, _, tail = read_gaussian_input_tail(str(tmp_path / 'z.log'))
+        assert input_file is not None and tail is None
+
+    def test_tail_written_after_geometry(self, g16_claisen_ts, temp_workdir, capsys):
+        log = _make_gaussian_pair(g16_claisen_ts, temp_workdir)
+        QRCGenerator(str(log), 0.3, 1, '4GB', None, False, 'QRC', None, None)
+        content = (temp_workdir / 'ts_QRC.com').read_text()
+        assert '#p opt=(calcfc,modredundant) freq b3lyp/genecp\n' in content
+        assert 'guess' not in content and 'geom' not in content
+        assert content.endswith('\n\nB 1 4 F\n\nC H O 0\n6-31G(d)\n****\n\n')
+        assert '1 2 1.0' not in content and 'Link1' not in content
+        assert 'copied from' in capsys.readouterr().out
+
+    def test_missing_input_warns(self, g16_claisen_ts, temp_workdir, capsys):
+        log = _make_gaussian_pair(g16_claisen_ts, temp_workdir, tail=False)
+        QRCGenerator(str(log), 0.3, 1, '4GB', None, False, 'QRC', None, None)
+        assert 'add it to the new input file by hand' in capsys.readouterr().out
+        assert (temp_workdir / 'ts_QRC.com').read_text().endswith('\n\n')
+
+    def test_route_mismatch_not_copied(self, g16_claisen_ts, temp_workdir, capsys):
+        log = _make_gaussian_pair(g16_claisen_ts, temp_workdir)
+        gjf = temp_workdir / 'ts.gjf'
+        gjf.write_text(gjf.read_text().replace('b3lyp/genecp', 'pbe0/genecp', 1))
+        QRCGenerator(str(log), 0.3, 1, '4GB', None, False, 'QRC', None, None)
+        assert 'B 1 4 F' not in (temp_workdir / 'ts_QRC.com').read_text()
+        assert 'different route' in capsys.readouterr().out
+
+    def test_user_route_without_extra_input_skips_tail(self, g16_claisen_ts, temp_workdir):
+        log = _make_gaussian_pair(g16_claisen_ts, temp_workdir)
+        QRCGenerator(str(log), 0.3, 1, '4GB', 'opt b3lyp/6-31g(d)', False, 'QRC', None, None)
+        assert '****' not in (temp_workdir / 'ts_QRC.com').read_text()
+
+    def test_user_route_with_gen_copies_tail(self, g16_claisen_ts, temp_workdir):
+        log = _make_gaussian_pair(g16_claisen_ts, temp_workdir)
+        QRCGenerator(str(log), 0.3, 1, '4GB', 'opt b3lyp/gen', False, 'QRC', None, None)
+        assert '6-31G(d)\n****' in (temp_workdir / 'ts_QRC.com').read_text()
+
+    def test_example_without_tail_unchanged(self, g16_acetaldehyde, temp_workdir):
+        """acetaldehyde.com has nothing after the geometry."""
+        QRCGenerator(str(g16_acetaldehyde), 0.3, 1, '4GB', None, False, 'QRC', None, None)
+        content = (temp_workdir / 'acetaldehyde_QRC.com').read_text()
+        assert content.splitlines()[3] == '# opt freq M062X/6-31G*'
+        assert content.endswith('\n\n') and not content.endswith('\n\n\n')
+
+
+class TestORCAInput:
+    """All '!' lines and %blocks of the ORCA input are carried over."""
+
+    ECHO = [
+        '                                       INPUT FILE\n',
+        '=' * 80 + '\n',
+        'NAME = ts.inp\n',
+        '|  1> ! wB97X-D3 def2-SVP OptTS Freq PAL8\n',
+        '|  2> ! CPCM(water) TightSCF   # solvent\n',
+        '|  3> %maxcore 3000\n',
+        '|  4> %pal\n',
+        '|  5>   nprocs 8\n',
+        '|  6> end\n',
+        '|  7> %geom\n',
+        '|  8>   Constraints\n',
+        '|  9>     {B 0 1 C}\n',
+        '| 10>   end\n',
+        '| 11> end\n',
+        '| 12> *xyz 0 1\n',
+        '| 13>  H 0.0 0.0 0.0\n',
+        '| 14>  H 0.0 0.0 0.7\n',
+        '| 15> *\n',
+        '| 16> %cpcm smd true end\n',
+        '| 17> $new_job\n',
+        '| 18> ! SP\n',
+        '| 19>                          ****END OF INPUT****\n',
+    ]
+
+    def test_read_orca_input(self):
+        keywords, blocks = read_orca_input(self.ECHO)
+        assert keywords == 'wB97X-D3 def2-SVP OptTS Freq PAL8 CPCM(water) TightSCF'
+        assert blocks == ['%geom', '  Constraints', '    {B 0 1 C}', '  end', 'end', '%cpcm smd true end']
+
+    def test_no_echo(self):
+        assert read_orca_input(['nothing here\n']) == (None, [])
+
+    def test_blocks_written_and_pal_stripped(self, orca_claisen_ts, temp_workdir):
+        text = orca_claisen_ts.read_text().replace(
+            '|  1> ! wB97X-D3 def2-SVP OptTS Freq\n|  2> \n',
+            '|  1> ! wB97X-D3 def2-SVP OptTS Freq PAL8\n|  2> ! CPCM(water)\n|  3> %cpcm smd true end\n', 1)
+        local = temp_workdir / 'multi.out'
+        local.write_text(text)
+        QRCGenerator(str(local), 0.3, 2, '4GB', None, False, 'QRC', None, None)
+        lines = (temp_workdir / 'multi_QRC.inp').read_text().splitlines()
+        assert lines[0] == '! wB97X-D3 def2-SVP Opt Freq CPCM(water)'
+        assert lines[1:4] == [' %pal nprocs 2 end', ' %maxcore 2048', '%cpcm smd true end']
+
+
+@QCHEM_DEV_CCLIB_SKIP
+class TestQChemInput:
+    """Q-Chem $rem settings and extra sections are carried over."""
+
+    def test_read_qchem_input(self, qchem_claisen_ts):
+        rem, extra = read_qchem_input(str(qchem_claisen_ts))
+        assert not any('JOBTYPE' in line.upper() for line in rem)
+        assert any('SCF_CONVERGENCE' in line for line in rem)
+        assert extra == []
+
+    def test_rem_and_sections_written_to_both_jobs(self, qchem_claisen_ts, temp_workdir):
+        text = qchem_claisen_ts.read_text().replace(
+            'SCF_CONVERGENCE      8\n$end\n',
+            'SCF_CONVERGENCE      8\nSOLVENT_METHOD SMD\n$end\n\n$smx\nsolvent water\n$end\n')
+        local = temp_workdir / 'q.out'
+        local.write_text(text)
+        QRCGenerator(str(local), 0.3, 1, '4GB', None, False, 'QRC', None, None)
+        opt_job, freq_job = (temp_workdir / 'q_QRC.inp').read_text().split('@@@')
+        for job, jobtype in ((opt_job, 'opt'), (freq_job, 'freq')):
+            assert f'JOBTYPE {jobtype}' in job
+            assert 'SOLVENT_METHOD SMD' in job and 'SCF_CONVERGENCE' in job
+            assert '$smx\nsolvent water\n$end' in job
+            assert 'JOBTYPE' in job and job.upper().count('JOBTYPE') == 1
+
+
+class TestXYZOutput:
+    """--xyz writes the displaced geometry only."""
+
+    def test_xyz_flag(self, g16_claisen_ts, temp_workdir):
+        qrc = QRCGenerator(str(g16_claisen_ts), 0.3, 1, '4GB', None, False, 'QRC', None, None, xyz=True)
+        lines = (temp_workdir / 'claisen_ts_QRC.xyz').read_text().splitlines()
+        assert not (temp_workdir / 'claisen_ts_QRC.com').exists()
+        assert int(lines[0]) == qrc.NATOMS and len(lines) == qrc.NATOMS + 2
+        assert 'mode(s) 1' in lines[1]
+        np.testing.assert_allclose([float(x) for x in lines[2].split()[1:]], qrc.NEW_CARTESIAN[0], atol=1e-7)
+
+
+class TestCLIConveniences:
+    """--both, extension case, default amplitude, unexpected errors."""
+
+    def test_default_amplitude(self):
+        assert DEFAULT_AMPLITUDE == 0.3
+
+    def test_both_directions(self, g16_claisen_ts, temp_workdir, monkeypatch, capsys):
+        monkeypatch.setattr('sys.argv', ['pyqrc', str(g16_claisen_ts), '--both', '-q'])
+        assert main() == 0
+        coords = {}
+        for suffix in ('QRCF', 'QRCR'):
+            lines = (temp_workdir / f'claisen_ts_{suffix}.com').read_text().splitlines()
+            coords[suffix] = np.array([[float(x) for x in line.split()[1:]] for line in lines[8:22]])
+        original = QRCGenerator(str(g16_claisen_ts), 0.0, 1, '4GB', None, False, 'X', None, None,
+                                write=False).CARTESIAN
+        np.testing.assert_allclose(coords['QRCF'] - original, original - coords['QRCR'], atol=2e-8)
+        assert np.abs(coords['QRCF'] - original).max() > 0.01
+        # The route note is printed once, not once per direction
+        assert capsys.readouterr().out.count('route changed') == 1
+
+    def test_uppercase_extension(self, g16_acetaldehyde, temp_workdir, monkeypatch):
+        shutil.copy(g16_acetaldehyde, temp_workdir / 'ACETALDEHYDE.LOG')
+        monkeypatch.setattr('sys.argv', ['pyqrc', 'ACETALDEHYDE.LOG', '-q'])
+        assert main() == 0
+        assert (temp_workdir / 'ACETALDEHYDE_QRC.com').exists()
+
+    def test_non_utf8_output(self, g16_claisen_ts, temp_workdir, monkeypatch):
+        data = g16_claisen_ts.read_bytes().replace(b' Charge =', b' caf\xe9 Charge =', 1)
+        (temp_workdir / 'enc.log').write_bytes(data)
+        monkeypatch.setattr('sys.argv', ['pyqrc', 'enc.log', '-q'])
+        assert main() == 0
+        assert (temp_workdir / 'enc_QRC.com').exists()
+
+    def test_unexpected_error_does_not_stop_batch(self, g16_acetaldehyde, g16_claisen_ts,
+                                                  temp_workdir, monkeypatch, capsys):
+        real_init = QRCGenerator.__init__
+
+        def flaky_init(self, file, *args, **kwargs):
+            if 'acetaldehyde' in str(file):
+                raise RuntimeError('boom')
+            real_init(self, file, *args, **kwargs)
+
+        monkeypatch.setattr(QRCGenerator, '__init__', flaky_init)
+        monkeypatch.setattr('sys.argv', ['pyqrc', str(g16_acetaldehyde), str(g16_claisen_ts), '-q'])
+        assert main() == 1
+        assert 'unexpected error' in capsys.readouterr().out
+        assert (temp_workdir / 'claisen_ts_QRC.com').exists()
+
+    def test_overlap_warning(self, g16_claisen_ts, temp_workdir, monkeypatch, capsys):
+        monkeypatch.setattr('sys.argv', ['pyqrc', str(g16_claisen_ts), '--amp', '5', '-q'])
+        main()
+        assert 'atoms are very close' in capsys.readouterr().out
+
+
+# --- ORCA reader (fallback for ORCA outputs cclib cannot read, e.g. ORCA 6) ---
+
+import logging  # noqa: E402  pylint: disable=wrong-import-position,wrong-import-order
+import cclib  # noqa: E402  pylint: disable=wrong-import-position,wrong-import-order
+
+from pyqrc.orca_reader import (  # noqa: E402  pylint: disable=wrong-import-position
+    ORCAReadError,
+    is_orca_output,
+    read_orca_frequencies,
+)
+from pyqrc.pyQRC import parse_output  # noqa: E402  pylint: disable=wrong-import-position
+
+# Reference values from cclib master, which can read ORCA 6
+ORCA6_REFERENCE = {
+    'acetaldehyde': dict(natom=7, nvib=15, first=-190.74, last=3174.51,
+                         disp=[-3.5e-05, 0.000184, -0.093569], coord=[0.236194, 0.411275, 0.001351]),
+    'claisen_ts': dict(natom=14, nvib=36, first=-636.62, last=3280.48,
+                       disp=[0.368031, 0.185735, 0.076536], coord=[-1.409443, 0.796601, -0.282714]),
+    'full_alkyne_TS': dict(natom=130, nvib=384, first=-105.42, last=3258.79,
+                           disp=[0.005891, -0.008512, -0.000255], coord=[0.515094, -0.787338, 14.336678]),
+}
+
+
+def _truncate(src, dest, marker):
+    """Copy an output, cutting it at the first line containing marker."""
+    lines = Path(src).read_text().splitlines(keepends=True)
+    cut = next(i for i, line in enumerate(lines) if marker in line)
+    Path(dest).write_text(''.join(lines[:cut]))
+    return dest
+
+
+class TestORCAReader:
+    """pyQRC's ORCA reader agrees with cclib and reads ORCA 6."""
+
+    @pytest.mark.parametrize('name', ['acetaldehyde', 'claisen_ts'])
+    def test_matches_cclib_on_orca5(self, name):
+        """On ORCA 5 outputs, which cclib releases read, both parsers agree."""
+        path = str(datapath(f'orca5/{name}.out'))
+        ours = read_orca_frequencies(path)
+        ref = cclib.io.ccopen(path, loglevel=logging.CRITICAL).parse()
+        assert ours.natom == ref.natom
+        assert list(ours.atomnos) == list(ref.atomnos)
+        assert (ours.charge, ours.mult) == (ref.charge, ref.mult)
+        np.testing.assert_allclose(ours.atomcoords[-1], ref.atomcoords[-1])
+        np.testing.assert_allclose(ours.vibfreqs, ref.vibfreqs, atol=0.01)
+        np.testing.assert_allclose(ours.vibdisps, ref.vibdisps)
+
+    @pytest.mark.parametrize('name', sorted(ORCA6_REFERENCE))
+    def test_reads_orca6(self, name):
+        ref = ORCA6_REFERENCE[name]
+        data = read_orca_frequencies(str(datapath(f'orca6/{name}.out')))
+        assert data.natom == ref['natom'] and (data.charge, data.mult) == (0, 1)
+        assert len(data.vibfreqs) == ref['nvib'] == 3 * ref['natom'] - 6
+        assert data.vibfreqs[0] == pytest.approx(ref['first'])
+        assert data.vibfreqs[-1] == pytest.approx(ref['last'])
+        assert data.vibdisps.shape == (ref['nvib'], ref['natom'], 3)
+        np.testing.assert_allclose(data.vibdisps[0][0], ref['disp'])
+        np.testing.assert_allclose(data.atomcoords[-1][0], ref['coord'])
+        assert data.metadata['package'] == 'ORCA'
+        assert data.metadata['package_version'].startswith('6.')
+
+    @pytest.mark.parametrize('name', sorted(ORCA6_REFERENCE))
+    def test_parse_output_reads_orca6(self, name, capfd):
+        """parse_output gives the same data whichever cclib is installed, quietly."""
+        data = parse_output(str(datapath(f'orca6/{name}.out')))
+        assert len(data.vibfreqs) == ORCA6_REFERENCE[name]['nvib']
+        assert data.vibfreqs[0] == pytest.approx(ORCA6_REFERENCE[name]['first'], abs=0.01)
+        # cclib's own error log is silenced when the fallback takes over
+        assert 'ERROR' not in capfd.readouterr().err
+
+    def test_fallback_when_cclib_raises(self, orca_claisen_ts):
+        class FailingParser:
+            def parse(self):
+                raise IndexError('list index out of range')
+
+        with patch('pyqrc.pyQRC.cclib.io.ccopen', return_value=FailingParser()):
+            data = parse_output(str(orca_claisen_ts))
+        assert isinstance(data, SimpleNamespace)
+        assert data.vibfreqs[0] == pytest.approx(-633.34, abs=0.01)
+
+    def test_fallback_when_cclib_finds_no_modes(self, orca_claisen_ts):
+        class NoModesParser:
+            def parse(self):
+                return SimpleNamespace(natom=14)
+
+        with patch('pyqrc.pyQRC.cclib.io.ccopen', return_value=NoModesParser()):
+            data = parse_output(str(orca_claisen_ts))
+        assert data.vibdisps.shape == (36, 14, 3)
+
+    def test_cclib_preferred_when_it_works(self, orca_claisen_ts):
+        assert not isinstance(parse_output(str(orca_claisen_ts)), SimpleNamespace)
+
+    def test_non_orca_errors_not_hidden(self, g16_claisen_ts):
+        class FailingParser:
+            def parse(self):
+                raise ValueError('bad gaussian')
+
+        with patch('pyqrc.pyQRC.cclib.io.ccopen', return_value=FailingParser()):
+            with pytest.raises(ValueError, match='bad gaussian'):
+                parse_output(str(g16_claisen_ts))
+
+    def test_truncated_orca_output_raises(self, orca6_claisen_ts, tmp_path):
+        """An output that stops before the normal modes is a clear parse error."""
+        path = _truncate(orca6_claisen_ts, tmp_path / 'cut.out', 'NORMAL MODES')
+        with pytest.raises(ORCAReadError, match='no frequency calculation'):
+            read_orca_frequencies(str(path))
+        with patch('pyqrc.pyQRC.cclib.io.ccopen', side_effect=IndexError('boom')):
+            with pytest.raises(QRCParseError, match='pyQRC ORCA reader'):
+                parse_output(str(path))
+
+    def test_no_frequency_job(self, orca6_claisen_ts, tmp_path):
+        path = _truncate(orca6_claisen_ts, tmp_path / 'opt.out', 'VIBRATIONAL FREQUENCIES')
+        with pytest.raises(ORCAReadError):
+            read_orca_frequencies(str(path))
+
+    def test_without_first_vibration_line(self, orca_acetaldehyde, tmp_path):
+        """Falls back to dropping 6 translations/rotations for a non-linear molecule."""
+        text = orca_acetaldehyde.read_text()
+        path = tmp_path / 'nofirst.out'
+        path.write_text(text.replace('The first frequency considered to be a vibration', 'removed'))
+        np.testing.assert_allclose(read_orca_frequencies(str(path)).vibfreqs,
+                                   read_orca_frequencies(str(orca_acetaldehyde)).vibfreqs)
+
+    def test_is_orca_output(self, orca6_claisen_ts, g16_claisen_ts, qchem_claisen_ts):
+        assert is_orca_output(str(orca6_claisen_ts))
+        assert not is_orca_output(str(g16_claisen_ts))
+        assert not is_orca_output(str(qchem_claisen_ts))
+
+
+class TestORCA6EndToEnd:
+    """ORCA 6 outputs work through the CLI with any cclib."""
+
+    def test_cli_orca6_ts(self, orca6_claisen_ts, temp_workdir, monkeypatch, capsys):
+        monkeypatch.setattr('sys.argv', ['pyqrc', str(orca6_claisen_ts), '--both', '--nproc', '4', '--mem', '8GB'])
+        assert main() == 0
+        assert '1 imaginary frequencies: processed' in capsys.readouterr().out
+        for suffix in ('QRCF', 'QRCR'):
+            lines = (temp_workdir / f'claisen_ts_{suffix}.inp').read_text().splitlines()
+            assert lines[:3] == ['! wB97X-D3 def2-SVP Opt Freq', ' %pal nprocs 4 end', ' %maxcore 2048']
+            assert '* xyz 0 1' in lines
+        assert (temp_workdir / 'claisen_ts_QRCF.qrc').exists()
+
+    def test_orca6_displacement_along_imaginary_mode(self, orca6_claisen_ts, temp_workdir):
+        qrc = QRCGenerator(str(orca6_claisen_ts), 0.3, 1, '4GB', None, False, 'QRC', None, None)
+        displacement = qrc.NEW_CARTESIAN - qrc.CARTESIAN
+        np.testing.assert_allclose(displacement, 0.3 * qrc.DISPS[0])
+        assert qrc.MW_DISTANCE > 0
+
+    def test_orca61_large_ts(self, orca6_alkyne_ts, temp_workdir):
+        """ORCA 6.1, 130 atoms, lowercase optts keyword with RIJCOSX."""
+        QRCGenerator(str(orca6_alkyne_ts), 0.3, 8, '32GB', None, False, 'QRC', None, None)
+        lines = (temp_workdir / 'full_alkyne_TS_QRC.inp').read_text().splitlines()
+        assert lines[0] == '! Opt wb97x-d3 def2-svp rijcosx freq'
+        assert ' %maxcore 4096' in lines
+        assert sum(1 for line in lines if len(line.split()) == 4 and line.split()[0].isalpha()) == 130
+
+
+# --- Phase 2: minima skipped, --outdir/--overwrite, from_arrays/from_ase ---
+
+from pyqrc.pyQRC import (  # noqa: E402  pylint: disable=wrong-import-position
+    QRCFileExistsError,
+    vibrations_from_ase,
+)
+
+MINIMUM_LOG = datapath('g16/planar_chex_mode1.log')  # no imaginary frequencies
+
+
+class TestSkipMinima:
+    """Files without imaginary frequencies are skipped unless a mode is requested."""
+
+    def test_minimum_skipped_by_default(self, temp_workdir, monkeypatch, capsys):
+        monkeypatch.setattr('sys.argv', ['pyqrc', str(MINIMUM_LOG)])
+        assert main() == 0
+        out = capsys.readouterr().out
+        assert 'no imaginary frequencies: skipping' in out and '--freqnum' in out
+        assert not list(temp_workdir.iterdir())
+
+    def test_minimum_with_freqnum_processed(self, temp_workdir, monkeypatch):
+        monkeypatch.setattr('sys.argv', ['pyqrc', str(MINIMUM_LOG), '--freqnum', '1', '-q'])
+        assert main() == 0
+        assert (temp_workdir / 'planar_chex_mode1_QRC.com').exists()
+
+    def test_auto_still_skips_with_freqnum(self, temp_workdir, monkeypatch, capsys):
+        monkeypatch.setattr('sys.argv', ['pyqrc', str(MINIMUM_LOG), '--auto', '--freqnum', '1'])
+        assert main() == 0
+        assert 'skipping' in capsys.readouterr().out
+        assert not list(temp_workdir.iterdir())
+
+    def test_library_warns_when_not_displaced(self, temp_workdir, capsys):
+        qrc = QRCGenerator(str(MINIMUM_LOG), 0.3, 1, '4GB', None, False, 'QRC', None, None)
+        np.testing.assert_allclose(qrc.NEW_CARTESIAN, qrc.CARTESIAN)
+        assert 'geometry was not displaced' in capsys.readouterr().out
+
+
+class TestOutdir:
+    """--outdir writes all files into a (new) directory."""
+
+    def test_cli_outdir(self, g16_claisen_ts, temp_workdir, monkeypatch):
+        monkeypatch.setattr('sys.argv', ['pyqrc', str(g16_claisen_ts), '--outdir', 'a/b', '--both'])
+        assert main() == 0
+        written = sorted(p.name for p in (temp_workdir / 'a' / 'b').iterdir())
+        assert written == ['claisen_ts_QRCF.com', 'claisen_ts_QRCF.qrc', 'claisen_ts_QRCR.com', 'claisen_ts_QRCR.qrc']
+        assert sorted(p.name for p in temp_workdir.iterdir()) == ['a']
+        # The checkpoint is named for the job, which runs wherever it is submitted
+        assert (temp_workdir / 'a/b/claisen_ts_QRCF.com').read_text().startswith('%chk=claisen_ts_QRCF.chk\n')
+
+    def test_output_paths_match_written_files(self, orca_claisen_ts, tmp_path):
+        qrc = QRCGenerator(str(orca_claisen_ts), 0.3, 1, '4GB', None, True, 'X', None, None,
+                           write=False, outdir=str(tmp_path / 'o'))
+        paths = qrc.output_paths()
+        assert [p.name for p in paths] == ['claisen_ts_X.inp', 'claisen_ts_X.qrc']
+        qrc.write_files()
+        assert all(p.exists() for p in paths)
+        assert sorted(p.name for p in (tmp_path / 'o').iterdir()) == sorted(p.name for p in paths)
+
+    def test_output_paths_xyz(self, g16_claisen_ts, tmp_path):
+        qrc = QRCGenerator(str(g16_claisen_ts), 0.3, 1, '4GB', None, False, 'QRC', None, None,
+                           write=False, xyz=True, outdir=str(tmp_path))
+        assert [p.name for p in qrc.output_paths()] == ['claisen_ts_QRC.xyz']
+
+
+class TestOverwrite:
+    """The CLI never replaces existing files unless --overwrite is given."""
+
+    def test_second_run_refused(self, g16_claisen_ts, temp_workdir, monkeypatch, capsys):
+        monkeypatch.setattr('sys.argv', ['pyqrc', str(g16_claisen_ts), '-q'])
+        assert main() == 0
+        target = temp_workdir / 'claisen_ts_QRC.com'
+        target.write_text('edited by hand')
+        assert main() == 1
+        assert 'already exists' in capsys.readouterr().out
+        assert target.read_text() == 'edited by hand'
+
+    def test_both_writes_nothing_if_one_exists(self, g16_claisen_ts, temp_workdir, monkeypatch):
+        (temp_workdir / 'claisen_ts_QRCR.com').write_text('keep')
+        monkeypatch.setattr('sys.argv', ['pyqrc', str(g16_claisen_ts), '--both'])
+        assert main() == 1
+        assert sorted(p.name for p in temp_workdir.iterdir()) == ['claisen_ts_QRCR.com']
+
+    def test_existing_qrc_summary_also_protected(self, g16_claisen_ts, temp_workdir, monkeypatch):
+        (temp_workdir / 'claisen_ts_QRC.qrc').write_text('keep')
+        monkeypatch.setattr('sys.argv', ['pyqrc', str(g16_claisen_ts)])
+        assert main() == 1
+        assert not (temp_workdir / 'claisen_ts_QRC.com').exists()
+
+    def test_overwrite_flag(self, g16_claisen_ts, temp_workdir, monkeypatch):
+        target = temp_workdir / 'claisen_ts_QRC.com'
+        target.write_text('old')
+        monkeypatch.setattr('sys.argv', ['pyqrc', str(g16_claisen_ts), '--overwrite', '-q'])
+        assert main() == 0
+        assert target.read_text().startswith('%chk=')
+
+    def test_library_default_overwrites(self, g16_claisen_ts, temp_workdir):
+        (temp_workdir / 'claisen_ts_QRC.com').write_text('old')
+        QRCGenerator(str(g16_claisen_ts), 0.3, 1, '4GB', None, False, 'QRC', None, None)
+        assert (temp_workdir / 'claisen_ts_QRC.com').read_text().startswith('%chk=')
+
+    def test_library_overwrite_false_raises_before_writing(self, g16_claisen_ts, temp_workdir):
+        (temp_workdir / 'claisen_ts_QRC.com').write_text('old')
+        with pytest.raises(QRCFileExistsError):
+            QRCGenerator(str(g16_claisen_ts), 0.3, 1, '4GB', None, True, 'QRC', None, None,
+                         overwrite=False)
+        assert not (temp_workdir / 'claisen_ts_QRC.qrc').exists()
+        assert (temp_workdir / 'claisen_ts_QRC.com').read_text() == 'old'
+
+
+class TestFromArrays:
+    """QRCGenerator.from_arrays gives the same result as reading an output file."""
+
+    @pytest.fixture
+    def orca_data(self, orca_claisen_ts):
+        return parse_output(str(orca_claisen_ts))
+
+    def test_matches_file_based_generator(self, orca_claisen_ts, orca_data, temp_workdir):
+        from_file = QRCGenerator(str(orca_claisen_ts), 0.3, 1, '4GB', None, False, 'QRC', None, None,
+                                 write=False)
+        from_arrays = QRCGenerator.from_arrays(
+            orca_data.atomnos, orca_data.atomcoords[-1], orca_data.vibfreqs, orca_data.vibdisps)
+        # ORCA prints unit-norm modes to 6 decimals
+        np.testing.assert_allclose(from_arrays.NEW_CARTESIAN, from_file.NEW_CARTESIAN, atol=1e-5)
+        assert from_arrays._target_modes == from_file._target_modes == {0}
+        assert from_arrays.MW_DISTANCE == pytest.approx(from_file.MW_DISTANCE, rel=1e-4)
+        assert not list(temp_workdir.iterdir()), "from_arrays must not write by default"
+
+    def test_modes_are_normalized(self, orca_data):
+        base = QRCGenerator.from_arrays(orca_data.atomnos, orca_data.atomcoords[-1],
+                                        orca_data.vibfreqs, orca_data.vibdisps)
+        scaled = QRCGenerator.from_arrays(orca_data.atomnos, orca_data.atomcoords[-1],
+                                          orca_data.vibfreqs, 25.0 * orca_data.vibdisps)
+        np.testing.assert_allclose(scaled.NEW_CARTESIAN, base.NEW_CARTESIAN)
+
+    def test_mode_selection_and_negative_amplitude(self, orca_data):
+        args = (orca_data.atomnos, orca_data.atomcoords[-1], orca_data.vibfreqs, orca_data.vibdisps)
+        fwd = QRCGenerator.from_arrays(*args, amplitude=0.3, num=5)
+        rev = QRCGenerator.from_arrays(*args, amplitude=-0.3, val=orca_data.vibfreqs[4])
+        assert fwd._target_modes == rev._target_modes == {4}
+        np.testing.assert_allclose(fwd.NEW_CARTESIAN - fwd.CARTESIAN, rev.CARTESIAN - rev.NEW_CARTESIAN)
+
+    def test_write_xyz(self, orca_data, tmp_path):
+        qrc = QRCGenerator.from_arrays(orca_data.atomnos, orca_data.atomcoords[-1], orca_data.vibfreqs,
+                                       orca_data.vibdisps, name='mlip_ts', outdir=str(tmp_path), write=True)
+        lines = (tmp_path / 'mlip_ts_QRC.xyz').read_text().splitlines()
+        assert int(lines[0]) == 14 and len(lines) == 16
+        np.testing.assert_allclose([float(x) for x in lines[2].split()[1:]], qrc.NEW_CARTESIAN[0], atol=1e-7)
+
+    def test_write_gaussian_with_route(self, orca_data, tmp_path):
+        QRCGenerator.from_arrays(orca_data.atomnos, orca_data.atomcoords[-1], orca_data.vibfreqs,
+                                 orca_data.vibdisps, name='ts', program='Gaussian', charge=-1, mult=2,
+                                 route='opt=(ts,calcfc) b3lyp/6-31g(d)', outdir=str(tmp_path), write=True)
+        lines = (tmp_path / 'ts_QRC.com').read_text().splitlines()
+        assert lines[3] == '# opt=(ts,calcfc) b3lyp/6-31g(d)'  # used as given
+        assert lines[7] == '-1 2'
+
+    def test_write_orca_with_route(self, orca_data, tmp_path):
+        QRCGenerator.from_arrays(orca_data.atomnos, orca_data.atomcoords[-1], orca_data.vibfreqs,
+                                 orca_data.vibdisps, name='ts', program='ORCA', route='r2SCAN-3c Opt',
+                                 nproc=4, mem='8GB', outdir=str(tmp_path), write=True)
+        lines = (tmp_path / 'ts_QRC.inp').read_text().splitlines()
+        assert lines[:3] == ['! r2SCAN-3c Opt', ' %pal nprocs 4 end', ' %maxcore 2048']
+
+    @pytest.mark.parametrize('change,match', [
+        (dict(coords=np.zeros((13, 3))), 'coords must have shape'),
+        (dict(modes=np.ones((3, 14, 3))), 'modes must have shape'),
+        (dict(atomnos=[0] * 14), 'atomic numbers'),
+        (dict(program='QChem', route='x'), 'program must be'),
+        (dict(program='Gaussian'), 'a route is needed'),
+        (dict(modes='zero'), 'all-zero'),
+    ])
+    def test_validation(self, orca_data, change, match):
+        kwargs = dict(atomnos=orca_data.atomnos, coords=orca_data.atomcoords[-1],
+                      freqs=orca_data.vibfreqs, modes=orca_data.vibdisps)
+        kwargs.update(change)
+        if isinstance(kwargs['modes'], str):
+            kwargs['modes'] = np.zeros_like(orca_data.vibdisps)
+        with pytest.raises(ValueError, match=match):
+            QRCGenerator.from_arrays(**kwargs)
+
+
+class FakeAtoms:
+    """Just enough of ase.Atoms for from_ase."""
+
+    def get_atomic_numbers(self):
+        return np.array([8, 1, 1])
+
+    def get_positions(self):
+        return np.array([[0.0, 0.0, 0.119], [0.0, 0.763, -0.477], [0.0, -0.763, -0.477]])
+
+    def get_initial_charges(self):
+        return np.array([-1.0, 0.0, 0.0])
+
+
+class FakeVibrations:
+    """Just enough of ase.vibrations.Vibrations for from_ase: 9 modes, 6 trans/rot."""
+
+    atoms = FakeAtoms()
+
+    def get_energies(self):
+        # eV; 0.062j ~ 500i cm-1; tiny values are trans/rot noise
+        return np.array([1e-5j, 2e-6j, 1e-6, 2e-6, 3e-6, 4e-6, 0.062j, 0.1984, 0.4587])
+
+    def get_mode(self, i):
+        mode = np.zeros((3, 3))
+        mode[i % 3, i % 3] = 2.0 + i
+        return mode
+
+
+class TestFromAse:
+    """from_ase works on an ASE Vibrations object (ASE is not a dependency)."""
+
+    def test_vibrations_from_ase(self):
+        freqs, modes = vibrations_from_ase(FakeVibrations())
+        np.testing.assert_allclose(freqs, [-500.06, 1600.2, 3699.7], atol=0.1)
+        assert modes.shape == (3, 3, 3)
+
+    def test_from_ase(self):
+        qrc = QRCGenerator.from_ase(FakeVibrations(), amplitude=0.3)
+        assert qrc.CHARGE == -1 and qrc.MULT == 1
+        assert qrc._target_modes == {0}
+        expected = FakeAtoms().get_positions()
+        expected[0, 0] += 0.3  # mode 6 is a unit x-displacement of atom 0
+        np.testing.assert_allclose(qrc.NEW_CARTESIAN, expected)
+
+    def test_from_ase_kwargs(self):
+        qrc = QRCGenerator.from_ase(FakeVibrations(), charge=0, num=2, amplitude=-0.1)
+        assert qrc.CHARGE == 0 and qrc._target_modes == {1}
+
+    def test_matches_ase2gaussian_route(self, temp_workdir):
+        """A real ASE Vibrations run gives the same geometry as the log-file bridge."""
+        ase = pytest.importorskip('ase')
+        from ase.calculators.emt import EMT  # pylint: disable=import-outside-toplevel
+        from ase.vibrations import Vibrations  # pylint: disable=import-outside-toplevel
+        import importlib.util  # pylint: disable=import-outside-toplevel
+        from tests.conftest import EXAMPLES_PATH  # pylint: disable=import-outside-toplevel
+        spec = importlib.util.spec_from_file_location('ase2gaussian', EXAMPLES_PATH / 'ase_mlip' / 'ase2gaussian.py')
+        ase2gaussian = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(ase2gaussian)
+
+        atoms = ase.Atoms('NH3', positions=[[0, 0, 0.1], [1.0, 0, 0], [-0.5, 0.87, 0], [-0.5, -0.87, 0]])
+        atoms.calc = EMT()
+        vib = Vibrations(atoms, name=str(temp_workdir / 'vib'))
+        vib.run()
+        freqs, modes = ase2gaussian.extract_vibrations(vib)
+        ase2gaussian.write_gaussian_freq_log('bridge.log', atoms, freqs, modes)
+        via_log = QRCGenerator('bridge.log', 0.3, 1, '4GB', None, False, 'QRC', None, 1, write=False)
+        direct = QRCGenerator.from_ase(vib, amplitude=0.3, num=1)
+        np.testing.assert_allclose(direct.FREQS, via_log.FREQS, atol=1e-3)
+        # The log stores displacements to 2 decimals
+        np.testing.assert_allclose(direct.NEW_CARTESIAN, via_log.NEW_CARTESIAN, atol=0.3 * 0.006)
+
+
+class TestNewContactsOnly:
+    """Only close contacts created by the displacement count as overlaps."""
+
+    def test_nitrile_is_not_a_clash(self, tmp_path):
+        """A C#N bond is shorter than the contact threshold before any displacement."""
+        coords = np.array([[0.0, 0.0, 0.0], [1.14, 0.0, 0.0], [-1.09, 0.0, 0.0]])
+        modes = np.zeros((1, 3, 3))
+        modes[0, 2, 1] = 1.0  # move H sideways: no new contact
+        qrc = QRCGenerator.from_arrays([6, 7, 1], coords, [-100.0], modes, amplitude=0.3)
+        assert check_overlap(['C', 'N', 'H'], coords)  # the raw check flags C#N
+        assert not qrc.OVERLAPPED
+
+    def test_new_contact_is_a_clash(self):
+        coords = np.array([[0.0, 0.0, 0.0], [1.14, 0.0, 0.0], [-1.09, 0.0, 0.0]])
+        modes = np.zeros((1, 3, 3))
+        modes[0, 2, 0] = 1.0  # push H into C
+        qrc = QRCGenerator.from_arrays([6, 7, 1], coords, [-100.0], modes, amplitude=0.8)
+        assert qrc.OVERLAPPED

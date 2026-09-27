@@ -30,6 +30,22 @@ jobs:
             pip install codecov-cli
             codecovcli upload-process --file coverage.xml || echo "Codecov upload failed; not failing the build"
 
+  notebooks:
+    docker:
+      - image: cimg/python:3.12
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: |
+            pip install --upgrade pip
+            pip install -e ".[dev]"
+      - run:
+          name: Run example notebooks and compare their saved outputs
+          # The ASE/MLIP notebook needs MACE (PyTorch) and a model download, so
+          # it is not run here; the rest must reproduce their outputs exactly.
+          command: pytest --nbval --nbval-sanitize-with examples/nbval_sanitize.cfg -p no:cacheprovider examples/g16 examples/orca5 examples/orca6 examples/qchem
+
   package:
     docker:
       - image: cimg/python:3.12
@@ -54,6 +70,10 @@ jobs:
             cp ~/project/examples/g16/acetaldehyde.log .
             /tmp/venv/bin/pyqrc acetaldehyde.log
             test -f acetaldehyde_QRC.com
+            # ORCA 6 must work with the released cclib (pyQRC's ORCA reader)
+            cp ~/project/examples/orca6/claisen_ts.out orca6_ts.out
+            /tmp/venv/bin/pyqrc orca6_ts.out
+            grep -q "^! wB97X-D3 def2-SVP Opt Freq" orca6_ts_QRC.inp
 
 workflows:
   test:
@@ -62,4 +82,5 @@ workflows:
           matrix:
             parameters:
               python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+      - notebooks
       - package
