@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.4.0 (unreleased)
+## 2.4.0 (2026-09-27)
 
 This release makes the input files pyQRC writes run correctly without hand
 editing, reads ORCA 6 outputs with a plain `pip install pyqrc`, and adds a
