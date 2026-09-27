@@ -202,7 +202,7 @@ pytest --nbval examples/g16 examples/orca5 examples/orca6 examples/qchem   # che
 
 **Notebooks.** The example notebooks' saved outputs are checked in CI with `nbval`, so re-run a notebook and commit it when its output changes. The ASE/MLIP notebook needs `mace-torch` and is not run in CI.
 
-Planned work is tracked in [ROADMAP.md](ROADMAP.md).
+Changes between releases are listed in [CHANGELOG.md](CHANGELOG.md); planned work is tracked in [ROADMAP.md](ROADMAP.md).
 
 ## Citation
 
